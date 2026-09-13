@@ -5,6 +5,7 @@ import androidx.lifecycle.viewModelScope
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
@@ -108,7 +109,17 @@ class RoundViewModel(
             }
         }
         syncConfigStore?.let { store ->
-            viewModelScope.launch { _syncConfig.value = store.loadConfig() }
+            // Observed, not read once: [SyncConfigReceiver] can write a fresh config from its own
+            // broadcast-receiver entry point at any time while this ViewModel is already alive, and
+            // the documented setup order (launch the app, *then* broadcast — `CLOUD_SAVES.md` section
+            // 5 item 11) guarantees that's exactly what happens on a fresh install. A one-shot
+            // `loadConfig()` here would miss that write forever, leaving the Cloud screen stuck on
+            // "Not configured" until a force-stop and relaunch. This collect never completes, so it
+            // keeps `_syncConfig` in sync with [SyncConfigStore.configFlow] for the ViewModel's whole
+            // lifetime — including picking up [recordSyncTime]'s own write with no extra reload code.
+            viewModelScope.launch {
+                store.configFlow().collect { config -> _syncConfig.value = config }
+            }
         }
     }
 
@@ -535,14 +546,17 @@ class RoundViewModel(
         }
     }
 
-    /** Stamps [SyncConfig.lastSyncAt] after a push or pull that actually succeeded, and reloads [_syncConfig] so the Cloud screen's status line updates without waiting for a full re-launch. No-op with no [syncConfigStore] (every test that isn't exercising sync itself). */
+    /**
+     * Stamps [SyncConfig.lastSyncAt] after a push or pull that actually succeeded. No explicit
+     * re-read of [_syncConfig] follows this write: the [init] block's [SyncConfigStore.configFlow]
+     * collector is already live and picks up this exact write on its own, the same way it picks up
+     * a [SyncConfigReceiver] broadcast. No-op with no [syncConfigStore] (every test that isn't
+     * exercising sync itself).
+     */
     private fun recordSyncTime() {
         val store = syncConfigStore ?: return
         val now = clock()
-        viewModelScope.launch {
-            store.recordSyncAt(now)
-            _syncConfig.value = store.loadConfig()
-        }
+        viewModelScope.launch { store.recordSyncAt(now) }
     }
 
     /** The Cloud screen's `CLEAR CONFIG` (`CLOUD_SAVES.md` section 6 Phase D) — the only UI-driven way to remove a configured endpoint; setting one is adb-only (see [SyncConfigReceiver]). */

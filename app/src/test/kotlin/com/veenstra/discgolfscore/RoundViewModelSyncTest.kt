@@ -2,6 +2,9 @@ package com.veenstra.discgolfscore
 
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.test.resetMain
 import kotlinx.coroutines.test.setMain
@@ -183,6 +186,31 @@ class RoundViewModelSyncTest {
         assertEquals(null, vm.syncConfig.value?.lastSyncAt)
     }
 
+    // ---- Live config updates (bug: config was read once at init and never refreshed) -----------------
+
+    /**
+     * Reproduces the on-device bug: `SyncConfigReceiver`'s `adb` broadcast writes the config from a
+     * different process entry point *while the app is already running* (`CLOUD_SAVES.md`'s
+     * documented setup order requires launching the app before broadcasting). A `RoundViewModel` that
+     * only reads [SyncConfigStore] once at construction never sees that write, and the Cloud screen
+     * is stuck on "Not configured" until a force-stop and relaunch. This test writes the config
+     * *after* the ViewModel is constructed, through the store directly (not through any
+     * [RoundViewModel] method — [FakeSyncConfigStore.writeExternally] stands in for the receiver),
+     * and asserts [RoundViewModel.syncConfig] reflects it with no re-construction. It fails against a
+     * one-shot `loadConfig()` read and passes once the config is observed via [SyncConfigStore.configFlow].
+     */
+    @Test
+    fun `syncConfig reflects a config written after construction, with no ViewModel re-construction`() {
+        val configStore = FakeSyncConfigStore(initial = null)
+        val vm = viewModel(syncConfigStore = configStore)
+
+        assertNull(vm.syncConfig.value) // nothing configured yet, same as a fresh install
+
+        configStore.writeExternally(config) // the broadcast landing while the Cloud screen might already be open
+
+        assertEquals(config, vm.syncConfig.value)
+    }
+
     // ---- In-progress / clear -----------------------------------------------------------------------
 
     @Test
@@ -205,28 +233,40 @@ class RoundViewModelSyncTest {
     }
 }
 
+/**
+ * Backed by a [MutableStateFlow] rather than a plain `var`, so [configFlow] behaves like the real
+ * [DataStoreSyncConfigStore]: every write is visible to whatever's already collecting, with no
+ * separate re-read step. [writeExternally] stands in for [SyncConfigReceiver] writing straight to
+ * DataStore from its own process entry point, independent of any [RoundViewModel] method call —
+ * exactly the write [RoundViewModelSyncTest]'s live-update test needs to simulate.
+ */
 private class FakeSyncConfigStore(initial: SyncConfig?) : SyncConfigStore {
-    private var config: SyncConfig? = initial
+    private val state = MutableStateFlow(initial)
     var cleared: Boolean = false
         private set
     var recordedSyncAt: Long? = null
         private set
 
-    override suspend fun loadConfig(): SyncConfig? = config
+    override fun configFlow(): Flow<SyncConfig?> = state
 
     override suspend fun saveConfig(url: String, secret: String) {
-        config = SyncConfig(url = url, secret = secret, lastSyncAt = null)
+        state.value = SyncConfig(url = url, secret = secret, lastSyncAt = null)
         cleared = false
     }
 
     override suspend fun clearConfig() {
-        config = null
+        state.value = null
         cleared = true
     }
 
     override suspend fun recordSyncAt(epochMillis: Long) {
         recordedSyncAt = epochMillis
-        config = config?.copy(lastSyncAt = epochMillis)
+        state.update { it?.copy(lastSyncAt = epochMillis) }
+    }
+
+    /** Simulates [SyncConfigReceiver] writing a config while the app (and this store) is already running, with no [RoundViewModel] method involved at all. */
+    fun writeExternally(config: SyncConfig) {
+        state.value = config
     }
 }
 

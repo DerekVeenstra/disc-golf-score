@@ -7,7 +7,8 @@ import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.longPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
-import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.map
 
 /**
  * The one Apps Script endpoint this watch is configured to talk to, plus when it last synced
@@ -28,12 +29,25 @@ data class SyncConfig(val url: String, val secret: String, val lastSyncAt: Long?
  * with the round/roster data would be a coincidence of implementation, not a reason.
  */
 interface SyncConfigStore {
-    suspend fun loadConfig(): SyncConfig?
+    /**
+     * The live config, re-emitted every time the underlying store changes. [RoundViewModel] collects
+     * this into its own `_syncConfig` for as long as the ViewModel lives, rather than reading it once
+     * — [SyncConfigReceiver] runs in its own broadcast-receiver entry point, a different call stack
+     * entirely, and may write a fresh config at any moment while the app's process (and its
+     * `RoundViewModel`) is already alive. A one-shot read at `init` would already be stale by the
+     * documented setup order (launch the app, *then* broadcast the config — `CLOUD_SAVES.md` section
+     * 5 item 11), which is exactly the bug this flow exists to fix: the Cloud screen would report
+     * "Not configured" forever, correctly-written config sitting unread until a force-stop and
+     * relaunch. DataStore's `Flow` is naturally push-based, so there's no separate "poll for changes"
+     * mechanism to build — mapping its `data` flow is the whole implementation (see
+     * [DataStoreSyncConfigStore]).
+     */
+    fun configFlow(): Flow<SyncConfig?>
 
     /** Overwrites whatever [url]/[secret] were previously configured. [SyncConfig.lastSyncAt] resets to `null` — a freshly (re)pointed endpoint has no sync history of its own yet, even if the *previous* endpoint did. Called only by [SyncConfigReceiver]. */
     suspend fun saveConfig(url: String, secret: String)
 
-    /** The watch screen's `CLEAR CONFIG` (`CLOUD_SAVES.md` section 6 Phase D). Removes the endpoint entirely — after this, [loadConfig] returns `null` until a new `adb` broadcast configures one again. */
+    /** The watch screen's `CLEAR CONFIG` (`CLOUD_SAVES.md` section 6 Phase D). Removes the endpoint entirely — after this, [configFlow] emits `null` until a new `adb` broadcast configures one again. */
     suspend fun clearConfig()
 
     /** Stamps [SyncConfig.lastSyncAt] after a push or pull actually succeeds. No-op if nothing is configured (there's nothing to stamp), which can only happen if config was cleared out from under an in-flight sync — a race, not a normal path. */
@@ -48,13 +62,13 @@ private val Context.discGolfSyncConfigDataStore: DataStore<Preferences> by prefe
 
 class DataStoreSyncConfigStore(private val context: Context) : SyncConfigStore {
 
-    override suspend fun loadConfig(): SyncConfig? {
-        val prefs = context.discGolfSyncConfigDataStore.data.first()
-        val url = prefs[SYNC_URL_KEY]
-        val secret = prefs[SYNC_SECRET_KEY]
-        if (url.isNullOrBlank() || secret.isNullOrBlank()) return null
-        return SyncConfig(url = url, secret = secret, lastSyncAt = prefs[SYNC_LAST_SYNC_AT_KEY])
-    }
+    override fun configFlow(): Flow<SyncConfig?> =
+        context.discGolfSyncConfigDataStore.data.map { prefs ->
+            val url = prefs[SYNC_URL_KEY]
+            val secret = prefs[SYNC_SECRET_KEY]
+            if (url.isNullOrBlank() || secret.isNullOrBlank()) null
+            else SyncConfig(url = url, secret = secret, lastSyncAt = prefs[SYNC_LAST_SYNC_AT_KEY])
+        }
 
     override suspend fun saveConfig(url: String, secret: String) {
         context.discGolfSyncConfigDataStore.edit { prefs ->

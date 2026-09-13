@@ -269,6 +269,16 @@ The land mines, in the order you'll hit them.
 9. **`android.permission.INTERNET`** in the manifest. It's not there today.
 10. **Threading.** All of it on `Dispatchers.IO`, launched from `viewModelScope`, with 20-second
     connect and read timeouts. A hung request on a watch is indistinguishable from a crash.
+11. **The app must be launched once after install before you broadcast.** A package that has never
+    been started (or was force-stopped) since install is in Android's "stopped" state, and a stopped
+    app's manifest-declared receivers get nothing — not even an explicit `-n` broadcast. The correct
+    order is: `install` → launch the app once, by hand → **then** `adb shell am broadcast …`. Get the
+    order wrong and the broadcast reports success with nothing to show for it, which reads exactly
+    like the `-n` mistake in item 3 but isn't. This is also why `RoundViewModel` must *observe*
+    `SyncConfigStore` (a `Flow`) rather than read it once at startup: the correct order broadcasts
+    the config into an app that's already running, so a one-shot read at `init` misses it and the
+    Cloud screen is stuck on "Not configured" until a force-stop and relaunch — found on-device,
+    cost real debugging time, fixed by making the config live instead of snapshotted.
 
 ---
 
