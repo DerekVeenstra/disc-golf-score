@@ -121,21 +121,21 @@ class LayoutRecordTest {
     }
 
     @Test
-    fun `formatLayoutRecord renders a single holder as name and to-par`() {
+    fun `formatLayoutRecord renders a single holder as a trophy, name, and to-par`() {
         val layout = riverside.copy(recordHolderNames = listOf("Alex"), recordToPar = -3)
-        assertEquals("Alex — −3", formatLayoutRecord(layout))
+        assertEquals("🏆 Alex — −3", formatLayoutRecord(layout))
     }
 
     @Test
-    fun `formatLayoutRecord renders a tie as every name, comma-separated, with the shared to-par`() {
+    fun `formatLayoutRecord renders a tie as a trophy then every name, comma-separated, with the shared to-par`() {
         val layout = riverside.copy(recordHolderNames = listOf("Alex", "Sam"), recordToPar = -3)
-        assertEquals("Alex, Sam — −3", formatLayoutRecord(layout))
+        assertEquals("🏆 Alex, Sam — −3", formatLayoutRecord(layout))
     }
 
     @Test
     fun `formatLayoutRecord renders even par as E`() {
         val layout = riverside.copy(recordHolderNames = listOf("Alex"), recordToPar = 0)
-        assertEquals("Alex — E", formatLayoutRecord(layout))
+        assertEquals("🏆 Alex — E", formatLayoutRecord(layout))
     }
 
     // ---- courseListDetail ------------------------------------------------------------------------

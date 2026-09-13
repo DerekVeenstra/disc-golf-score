@@ -75,7 +75,12 @@ fun LayoutEditorScreen(
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
             item {
-                PickableRow(label = layout.name, selected = false, onClick = { renameLauncher(layout.name) })
+                PickableRow(
+                    label = layout.name,
+                    leading = "✏️",
+                    selected = false,
+                    onClick = { renameLauncher(layout.name) },
+                )
             }
             item {
                 PickableRow(

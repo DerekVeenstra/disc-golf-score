@@ -65,7 +65,12 @@ fun CourseEditorScreen(
                     horizontalAlignment = Alignment.CenterHorizontally,
                 ) {
                     item {
-                        PickableRow(label = course.name, selected = false, onClick = { renameCourseLauncher(course.name) })
+                        PickableRow(
+                            label = course.name,
+                            leading = "✏️",
+                            selected = false,
+                            onClick = { renameCourseLauncher(course.name) },
+                        )
                     }
                     items(course.layouts.size) { index ->
                         val layout = course.layouts[index]

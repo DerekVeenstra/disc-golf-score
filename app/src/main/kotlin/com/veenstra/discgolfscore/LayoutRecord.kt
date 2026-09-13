@@ -43,18 +43,18 @@ internal fun recordAfterRound(layout: Layout, round: RoundState): Layout? {
 }
 
 /**
- * "Derek — −5" (or "Derek, Sam — −5" for a tie), or "No record yet" when [Layout.recordToPar] is
- * `null`. Shared by [ManageCoursesScreen]/[CourseEditorScreen]'s lists and [LayoutEditorScreen] so
- * none of them can drift on formatting. Reuses [formatToPar] — the same "E"/"+3"/"−5" shape shown
- * everywhere else a to-par appears, so a record reads consistently with the hole screen and final
- * scoreboard.
+ * "🏆 Derek — −5" (or "🏆 Derek, Sam — −5" for a tie), or "No record yet" when
+ * [Layout.recordToPar] is `null` — no trophy for a record that doesn't exist yet. Shared by
+ * [CourseEditorScreen]'s layout list and [LayoutEditorScreen] so neither can drift on formatting.
+ * Reuses [formatToPar] — the same "E"/"+3"/"−5" shape shown everywhere else a to-par appears, so a
+ * record reads consistently with the hole screen and final scoreboard.
  */
 internal fun formatLayoutRecord(layout: Layout): String {
     val toPar = layout.recordToPar
     return if (layout.recordHolderNames.isEmpty() || toPar == null) {
         "No record yet"
     } else {
-        "${layout.recordHolderNames.joinToString(", ")} — ${formatToPar(toPar)}"
+        "🏆 ${layout.recordHolderNames.joinToString(", ")} — ${formatToPar(toPar)}"
     }
 }
 
