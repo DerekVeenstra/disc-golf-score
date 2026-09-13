@@ -61,7 +61,7 @@ fun CloudSyncScreen(
         is CloudSyncMode.ConfirmingRestore -> {
             ConfirmScreen(
                 title = "Restore from sheet?",
-                detail = "Sheet wins on conflicts — nothing is deleted",
+                detail = "Sheet wins — nothing is deleted",
                 confirmLabel = "Yes, restore",
                 cancelLabel = "Cancel",
                 onConfirm = {
