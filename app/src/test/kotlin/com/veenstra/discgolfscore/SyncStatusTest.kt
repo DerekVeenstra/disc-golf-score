@@ -13,12 +13,27 @@ class SyncStatusTest {
     }
 
     @Test
-    fun `a push summary with warnings appends the skipped-row count`() {
+    fun `a push summary with warnings appends the skipped-row count, singular counts singularized`() {
         val result = PushResult.Success(
             SyncCounts(players = 1, courses = 1, rounds = 1),
             warnings = listOf("Courses!F14: par list length 17 ≠ hole count 18", "Players!A3: missing name"),
         )
-        assertEquals("Backed up 1 players · 1 courses · 1 rounds · 2 rows skipped", formatPushSummary(result))
+        assertEquals("Backed up 1 player · 1 course · 1 round · 2 rows skipped", formatPushSummary(result))
+    }
+
+    @Test
+    fun `a push summary singularizes each count independently`() {
+        val result = PushResult.Success(SyncCounts(players = 3, courses = 1, rounds = 0), warnings = emptyList())
+        assertEquals("Backed up 3 players · 1 course · 0 rounds", formatPushSummary(result))
+    }
+
+    @Test
+    fun `a push summary with exactly one warning says row, not rows`() {
+        val result = PushResult.Success(
+            SyncCounts(players = 1, courses = 1, rounds = 1),
+            warnings = listOf("Courses!F14: par list length 17 ≠ hole count 18"),
+        )
+        assertEquals("Backed up 1 player · 1 course · 1 round · 1 row skipped", formatPushSummary(result))
     }
 
     @Test
@@ -33,6 +48,20 @@ class SyncStatusTest {
         val data = BackupData(players = emptyList(), courses = emptyList(), rounds = List(12) { fakeRound(it) })
         val result = PullResult.Success(data, warnings = listOf("row a", "row b"))
         assertEquals("Restored 12 rounds · 2 rows skipped", formatPullSummary(result))
+    }
+
+    @Test
+    fun `a pull summary of exactly one round says round, not rounds`() {
+        val data = BackupData(players = emptyList(), courses = emptyList(), rounds = listOf(fakeRound(0)))
+        val result = PullResult.Success(data, warnings = emptyList())
+        assertEquals("Restored 1 round", formatPullSummary(result))
+    }
+
+    @Test
+    fun `a pull summary of zero rounds stays plural`() {
+        val data = BackupData(players = emptyList(), courses = emptyList(), rounds = emptyList())
+        val result = PullResult.Success(data, warnings = emptyList())
+        assertEquals("Restored 0 rounds", formatPullSummary(result))
     }
 
     private fun fakeRound(index: Int) = SavedRound(
