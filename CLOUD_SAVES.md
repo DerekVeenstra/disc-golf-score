@@ -15,7 +15,7 @@ Answers already settled with Derek (2026-09-13), which the rest of this doc assu
 | Trigger | **Manual only** — a Home row, no auto-push, no background work, no queue |
 | Restore conflict rule | **Merge by id, sheet wins** |
 | Config entry | **adb**, with the on-watch screen only showing configured/not and offering Clear |
-| Extra readable tabs | **Courses+layouts**, **Players**, **Career stats** |
+| Extra readable tabs | **Courses+layouts**, **Players**. Career stats deferred — pivot by hand for now |
 | JSON | **`org.json`**, hand-rolled encode/decode, no new runtime dependency |
 
 ---
@@ -191,7 +191,7 @@ and the one that matters most.
 
 ## 4. The sheet
 
-Five tabs. The script creates any that are missing on first push.
+Four tabs. The script creates any that are missing on first push.
 
 ### `Rounds` — one row per player-round, newest first
 
@@ -226,12 +226,12 @@ no record. Edit any of these and the change comes back on the next restore.
 `color` round-trips through hex. `rounds` is **derived by the script** from the Rounds tab and
 ignored on pull — it's there to read, not to edit.
 
-### `Stats` — entirely derived, never read back
-
-Written by the script from the Rounds tab on every push. Per player: rounds played, holes played,
-average to-par per 18, best round (to-par, course, layout, date), birdie / par / bogey rates, aces.
-Because nothing here is read back, this tab is free to be redesigned at any time without any
-coordination with the app at all.
+> **Career stats: deferred (2026-09-13).** A derived `Stats` tab was in the original plan and has
+> been dropped for now. Nothing else in this design depends on it: the Rounds tab already carries
+> one row per player-round with `total`, `toPar` and every hole, which is exactly the shape a pivot
+> table wants. Build the pivot by hand, and if it turns out to want to be automatic later, the
+> script can write a `Stats` tab from data it already has — no format change, no app change, no
+> coordination with anything in section 3.
 
 ### `_Meta`
 
@@ -300,8 +300,8 @@ gets `INTERNET` and the receiver.
 
 `scripts/Code.gs` in the repo, with setup steps in its header comment: create sheet → Extensions →
 Apps Script → paste → set `SECRET` in Script Properties → Deploy as web app, execute as me, access
-anyone with the link → copy `/exec` URL. `doPost` handles both ops; readable-column rendering and
-the Stats tab live here.
+anyone with the link → copy `/exec` URL. `doPost` handles both ops; all readable-column rendering
+lives here.
 
 ### Phase D — UI
 
@@ -325,6 +325,5 @@ the watch comes back.
    knowing before it's two.
 3. **Secret rotation.** Changing it means re-running the adb command and editing the script
    property. No UI for it. Assumed acceptable.
-4. **Should `Stats` be a tab at all**, or is a pivot table you build yourself better? The script
-   version is fixed and I'd have to guess at the stats you want; a pivot is yours. Easy either way —
-   say the word and I'll drop it.
+4. ~~Should `Stats` be a tab at all?~~ **Settled 2026-09-13: deferred.** Pivot by hand off the
+   Rounds tab; revisit if that gets tedious.
