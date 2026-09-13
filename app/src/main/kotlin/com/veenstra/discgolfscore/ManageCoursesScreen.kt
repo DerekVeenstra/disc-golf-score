@@ -22,22 +22,26 @@ private sealed interface ManageCoursesMode {
 
 /**
  * Housekeeping outside a round (PLAN.md section 3 "Players / Courses managers"): the saved course
- * list, `+ New course…` (name then hole count, same two-step creation as the setup screen), and
- * tap-to-edit into [CourseEditorScreen] — the only way to fix a wrong learned par (PLAN.md
- * section 2), so this screen exists in Phase 4 even with no round-starting flow behind it yet.
+ * list, `+ New course…` (name then hole count — creates the course with one auto-named layout,
+ * PLAN.md section 2 "Course creation"), and tap-to-edit into [CourseEditorScreen] — the gateway to
+ * fixing a wrong learned par or record, now by way of a layout (PLAN.md section 2 "Layouts"), so
+ * this screen exists in Phase 4 even with no round-starting flow behind it yet.
  *
- * Each row's [detail] line shows that course's record ([formatCourseRecord]) so it's visible
- * without opening the course.
+ * Each row's [detail] line is [courseListDetail]: a single-layout course's own record (unchanged
+ * from before layouts existed), or a layout count for a course with more than one.
  */
 @Composable
 fun ManageCoursesScreen(
     courses: List<Course>,
     onAddCourse: (name: String, holeCount: Int) -> Course?,
     onRenameCourse: (id: String, name: String) -> Unit,
-    onSetCoursePar: (id: String, holeIndex: Int, newPar: Int) -> Unit,
+    onAddLayout: (courseId: String, name: String, holeCount: Int) -> Layout?,
+    onRenameLayout: (courseId: String, layoutId: String, name: String) -> Unit,
+    onDeleteLayout: (courseId: String, layoutId: String) -> Unit,
+    onSetLayoutPar: (courseId: String, layoutId: String, holeIndex: Int, newPar: Int) -> Unit,
+    onSetLayoutRecordHolders: (courseId: String, layoutId: String, rawNames: String) -> Unit,
+    onSetLayoutRecordToPar: (courseId: String, layoutId: String, toPar: Int) -> Unit,
     onDeleteCourse: (id: String) -> Unit,
-    onSetCourseRecordHolders: (id: String, rawNames: String) -> Unit,
-    onSetCourseRecordToPar: (id: String, toPar: Int) -> Unit,
     onDone: () -> Unit,
 ) {
     var mode by remember { mutableStateOf<ManageCoursesMode>(ManageCoursesMode.Listing) }
@@ -45,17 +49,6 @@ fun ManageCoursesScreen(
     val newCourseNameLauncher = rememberTextInputLauncher(label = "Course name") { typed ->
         val trimmed = typed?.trim()
         if (!trimmed.isNullOrEmpty()) mode = ManageCoursesMode.ChoosingHoleCount(trimmed)
-    }
-    val renameLauncher = rememberTextInputLauncher(label = "Course name") { typed ->
-        val editing = mode as? ManageCoursesMode.Editing ?: return@rememberTextInputLauncher
-        val trimmed = typed?.trim()
-        if (!trimmed.isNullOrEmpty()) onRenameCourse(editing.courseId, trimmed)
-    }
-    // Unlike a rename, a blank result here is meaningful (it clears the record) rather than
-    // ignored — see setCourseRecordHolders — so every non-cancelled result is passed through.
-    val recordHoldersLauncher = rememberTextInputLauncher(label = "Record holder(s)") { typed ->
-        val editing = mode as? ManageCoursesMode.Editing ?: return@rememberTextInputLauncher
-        if (typed != null) onSetCourseRecordHolders(editing.courseId, typed)
     }
 
     when (val current = mode) {
@@ -71,7 +64,7 @@ fun ManageCoursesScreen(
                         val course = courses[index]
                         PickableRow(
                             label = course.name,
-                            detail = formatCourseRecord(course),
+                            detail = courseListDetail(course),
                             selected = false,
                             onClick = { mode = ManageCoursesMode.Editing(course.id) },
                             onLongClick = { mode = ManageCoursesMode.Editing(course.id) },
@@ -88,7 +81,7 @@ fun ManageCoursesScreen(
         }
 
         is ManageCoursesMode.ChoosingHoleCount -> HoleCountPickerScreen(
-            courseName = current.courseName,
+            subjectName = current.courseName,
             onCreate = { holeCount ->
                 onAddCourse(current.courseName, holeCount)
                 mode = ManageCoursesMode.Listing
@@ -101,11 +94,14 @@ fun ManageCoursesScreen(
             if (live != null) {
                 CourseEditorScreen(
                     course = live,
-                    onRename = { renameLauncher(live.name) },
-                    onEditRecord = { recordHoldersLauncher(live.recordHolderNames.joinToString(", ")) },
-                    onSetRecordToPar = { toPar -> onSetCourseRecordToPar(live.id, toPar) },
-                    onSetPar = { holeIndex, newPar -> onSetCoursePar(live.id, holeIndex, newPar) },
-                    onDelete = {
+                    onRenameCourse = onRenameCourse,
+                    onAddLayout = onAddLayout,
+                    onRenameLayout = onRenameLayout,
+                    onDeleteLayout = onDeleteLayout,
+                    onSetLayoutPar = onSetLayoutPar,
+                    onSetLayoutRecordHolders = onSetLayoutRecordHolders,
+                    onSetLayoutRecordToPar = onSetLayoutRecordToPar,
+                    onDeleteCourse = {
                         onDeleteCourse(live.id)
                         mode = ManageCoursesMode.Listing
                     },

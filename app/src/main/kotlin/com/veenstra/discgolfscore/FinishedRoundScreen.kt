@@ -54,10 +54,17 @@ private val RECORD_GOLD = Color(0xFFFFC107)
  * course name and [onDelete] adds a delete row below the standings. The live finish passes neither.
  *
  * [newRecord] is the fanfare PLAN.md section 2 "Course record" asks for: a banner above the
- * standings when this round is the one that just advanced its course's record ([RoundViewModel]'s
+ * standings when this round is the one that just advanced its layout's record ([RoundViewModel]'s
  * `justSetRecord`, computed once at the moment [RoundViewModel.finishRound] ran the write-back).
  * [WearApp] only ever passes `true` on the live finish path, never when [PastRoundsScreen] reopens
- * an old round — revisiting a record-holding round later isn't the moment it was *set*.
+ * an old round — revisiting a record-holding round later isn't the moment it was *set*. Reads
+ * "NEW LAYOUT RECORD!" rather than "NEW COURSE RECORD!" now that the record lives on a layout
+ * (PLAN.md section 2 "Layouts") — one consistent wording regardless of how many layouts the course
+ * has, rather than special-casing the common single-layout course.
+ *
+ * [RoundState.layoutName] shows underneath the course name, smaller, when it's non-blank — a round
+ * saved before layouts existed decodes with a blank [RoundState.layoutName] (PLAN.md section 2
+ * "RoundState snapshots the layout") and simply shows no second line rather than an empty one.
  */
 @Composable
 fun FinalScoreboardScreen(
@@ -90,7 +97,7 @@ fun FinalScoreboardScreen(
             if (newRecord) {
                 item {
                     Text(
-                        text = "🏆 NEW COURSE RECORD!",
+                        text = "🏆 NEW LAYOUT RECORD!",
                         fontSize = 13.sp,
                         fontWeight = FontWeight.Bold,
                         textAlign = TextAlign.Center,
@@ -101,6 +108,7 @@ fun FinalScoreboardScreen(
                     )
                 }
             }
+            val hasLayoutLine = round.layoutName.isNotBlank()
             item {
                 Text(
                     text = round.courseName,
@@ -109,8 +117,21 @@ fun FinalScoreboardScreen(
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                     color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.75f),
-                    modifier = Modifier.fillMaxWidth().padding(bottom = if (caption == null) 10.dp else 2.dp),
+                    modifier = Modifier.fillMaxWidth().padding(bottom = if (!hasLayoutLine && caption == null) 10.dp else 2.dp),
                 )
+            }
+            if (hasLayoutLine) {
+                item {
+                    Text(
+                        text = round.layoutName,
+                        fontSize = 11.sp,
+                        textAlign = TextAlign.Center,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.6f),
+                        modifier = Modifier.fillMaxWidth().padding(bottom = if (caption == null) 10.dp else 2.dp),
+                    )
+                }
             }
             if (caption != null) {
                 item {

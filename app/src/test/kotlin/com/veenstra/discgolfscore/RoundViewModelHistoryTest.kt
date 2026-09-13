@@ -29,7 +29,8 @@ class RoundViewModelHistoryTest {
         Dispatchers.resetMain()
     }
 
-    private val course = Course(id = "c1", name = "Riverside", holeCount = 3, pars = listOf(3, 4, 5))
+    private val layout = Layout(id = "l1", name = "18 holes", holeCount = 3, pars = listOf(3, 4, 5))
+    private val course = Course(id = "c1", name = "Riverside", layouts = listOf(layout))
     private val players = listOf(Player("p1", "Derek"), Player("p2", "Sam"))
 
     private fun idSequence(): () -> String {
@@ -49,7 +50,7 @@ class RoundViewModelHistoryTest {
 
     @Test
     fun `a persisted history loads into state`() {
-        val saved = SavedRound("r1", 1000L, reduce(newRound(course, players), RoundAction.Finish))
+        val saved = SavedRound("r1", 1000L, reduce(newRound(course, layout, players), RoundAction.Finish))
         val vm = RoundViewModel(historyStore = FakeRoundHistoryStore(initial = listOf(saved)))
         assertEquals(listOf(saved), vm.history.value)
     }
@@ -58,7 +59,7 @@ class RoundViewModelHistoryTest {
     fun `finishing a round saves the finished card to history with its finish time, and persists it`() {
         val store = FakeRoundHistoryStore()
         val vm = RoundViewModel(historyStore = store, idGenerator = idSequence(), clock = { 1234L })
-        vm.startRound(course, players)
+        vm.startRound(course, layout, players)
         vm.adjust("p1", 1)
 
         vm.finishRound()
@@ -75,7 +76,7 @@ class RoundViewModelHistoryTest {
         val store = FakeRoundHistoryStore()
         val vm = RoundViewModel(historyStore = store, idGenerator = idSequence())
 
-        vm.startRound(course, players)
+        vm.startRound(course, layout, players)
         vm.adjust("p1", 1)
         vm.nextHole()
 
@@ -86,7 +87,7 @@ class RoundViewModelHistoryTest {
     @Test
     fun `finishing an already-finished round does not save it twice`() {
         val vm = RoundViewModel(historyStore = FakeRoundHistoryStore(), idGenerator = idSequence())
-        vm.startRound(course, players)
+        vm.startRound(course, layout, players)
 
         vm.finishRound()
         vm.finishRound()
@@ -97,7 +98,7 @@ class RoundViewModelHistoryTest {
     @Test
     fun `a finished round restored from disk is not saved again`() {
         // It was already saved to history when it was first finished, before the relaunch.
-        val finished = reduce(newRound(course, players), RoundAction.Finish)
+        val finished = reduce(newRound(course, layout, players), RoundAction.Finish)
         val roundStore = object : RoundStore {
             override suspend fun loadRound(): RoundState = finished
             override suspend fun saveRound(round: RoundState) {}
@@ -122,10 +123,10 @@ class RoundViewModelHistoryTest {
         val store = FakeRoundHistoryStore()
         val vm = RoundViewModel(historyStore = store, idGenerator = idSequence(), clock = clockSequence(1000L, 2000L))
 
-        vm.startRound(course, players)
+        vm.startRound(course, layout, players)
         vm.finishRound()
         vm.done()
-        vm.startRound(course, players.take(1))
+        vm.startRound(course, layout, players.take(1))
         vm.finishRound()
 
         assertEquals(listOf(2000L, 1000L), vm.history.value.map { it.finishedAt })
@@ -136,7 +137,7 @@ class RoundViewModelHistoryTest {
     fun `DONE clears the active round but keeps it in history`() {
         val store = FakeRoundHistoryStore()
         val vm = RoundViewModel(historyStore = store, idGenerator = idSequence())
-        vm.startRound(course, players)
+        vm.startRound(course, layout, players)
         vm.finishRound()
 
         vm.done()
@@ -150,10 +151,10 @@ class RoundViewModelHistoryTest {
     fun `deleting a saved round removes only it, and persists`() {
         val store = FakeRoundHistoryStore()
         val vm = RoundViewModel(historyStore = store, idGenerator = idSequence(), clock = clockSequence(1000L, 2000L))
-        vm.startRound(course, players)
+        vm.startRound(course, layout, players)
         vm.finishRound()
         vm.done()
-        vm.startRound(course, players)
+        vm.startRound(course, layout, players)
         vm.finishRound()
         val (newer, older) = vm.history.value
 
@@ -166,7 +167,7 @@ class RoundViewModelHistoryTest {
     @Test
     fun `deleting an unknown saved round id is a no-op`() {
         val vm = RoundViewModel(historyStore = FakeRoundHistoryStore(), idGenerator = idSequence())
-        vm.startRound(course, players)
+        vm.startRound(course, layout, players)
         vm.finishRound()
         val before = vm.history.value
 

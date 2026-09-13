@@ -125,20 +125,22 @@ class RoundViewModel(
     // ---- Roster: courses ---------------------------------------------------------------------
 
     /**
-     * Creates a course with [holeCount] holes, all pars unlearned (PLAN.md section 2 "Course
-     * creation" — "pars are learned by playing"). Returns `null` and does nothing if [name]
+     * Creates a course with one auto-named layout (PLAN.md section 2 "Course creation" — the short
+     * path that skips asking for a first layout name). That layout has [holeCount] holes, all pars
+     * unlearned ("pars are learned by playing"). Returns `null` and does nothing if [name]
      * sanitizes to blank or [holeCount] isn't positive.
      */
     fun addCourse(name: String, holeCount: Int): Course? {
         val sanitized = sanitizeName(name)
         if (sanitized.isEmpty() || holeCount <= 0) return null
-        val course = Course(id = idGenerator(), name = sanitized, holeCount = holeCount, pars = List(holeCount) { 0 })
+        val layout = Layout(id = idGenerator(), name = defaultLayoutName(holeCount), holeCount = holeCount, pars = List(holeCount) { 0 })
+        val course = Course(id = idGenerator(), name = sanitized, layouts = listOf(layout))
         _courses.update { it + course }
         persistCourses()
         return course
     }
 
-    /** No-op if [id] isn't in the saved list, or if [name] sanitizes to blank. */
+    /** No-op if [id] isn't in the saved list, or if [name] sanitizes to blank. Leaves every one of its layouts alone. */
     fun renameCourse(id: String, name: String) {
         val sanitized = sanitizeName(name)
         if (sanitized.isEmpty()) return
@@ -152,19 +154,82 @@ class RoundViewModel(
     }
 
     /**
-     * Directly overwrites one hole's learned par (PLAN.md section 3 "Course editor" — the only
-     * way to fix a wrong learned par outside of playing a round, per section 2's "learn once"
-     * policy). Clamped to [MIN_PAR]..[MAX_PAR], same range [RoundAction.SetPar] enforces mid-round.
-     * No-op if [id] isn't a saved course or [holeIndex] is out of bounds for its hole count.
+     * Adds a new [Layout] to [courseId] — "+ New layout…" (PLAN.md section 2 "Layouts"), the way
+     * to give a course a second tee/pin configuration, or a different hole count, after it already
+     * exists. All pars start unlearned, exactly like [addCourse]'s auto-named first layout. Returns
+     * `null` and does nothing if [name] sanitizes to blank, [holeCount] isn't positive, or
+     * [courseId] isn't a saved course.
      */
-    fun setCoursePar(id: String, holeIndex: Int, newPar: Int) {
+    fun addLayout(courseId: String, name: String, holeCount: Int): Layout? {
+        val sanitized = sanitizeName(name)
+        if (sanitized.isEmpty() || holeCount <= 0) return null
+        if (_courses.value.none { it.id == courseId }) return null
+        val layout = Layout(id = idGenerator(), name = sanitized, holeCount = holeCount, pars = List(holeCount) { 0 })
+        _courses.update { list ->
+            list.map { course -> if (course.id == courseId) course.copy(layouts = course.layouts + layout) else course }
+        }
+        persistCourses()
+        return layout
+    }
+
+    /** No-op if [courseId]/[layoutId] don't resolve, or if [name] sanitizes to blank. Leaves the layout's pars/record alone. */
+    fun renameLayout(courseId: String, layoutId: String, name: String) {
+        val sanitized = sanitizeName(name)
+        if (sanitized.isEmpty()) return
+        _courses.update { list ->
+            list.map { course ->
+                if (course.id != courseId) {
+                    course
+                } else {
+                    course.copy(layouts = course.layouts.map { if (it.id == layoutId) it.copy(name = sanitized) else it })
+                }
+            }
+        }
+        persistCourses()
+    }
+
+    /**
+     * Removes [layoutId] from [courseId]'s layout list — a no-op if that would leave the course
+     * with zero layouts (PLAN.md section 2 "Deleting a layout"): blocking is simpler and safer
+     * than deleting the whole course along with its last layout, and it can never destroy a
+     * course's saved rounds out from under someone who only meant to remove one layout of several.
+     */
+    fun deleteLayout(courseId: String, layoutId: String) {
+        _courses.update { list ->
+            list.map { course ->
+                if (course.id == courseId && course.layouts.size > 1) {
+                    course.copy(layouts = course.layouts.filterNot { it.id == layoutId })
+                } else {
+                    course
+                }
+            }
+        }
+        persistCourses()
+    }
+
+    /**
+     * Directly overwrites one hole's learned par on [layoutId] (PLAN.md section 3 "Course editor"
+     * — the only way to fix a wrong learned par outside of playing a round, per section 2's "learn
+     * once" policy, now scoped to the layout it was learned on). Clamped to [MIN_PAR]..[MAX_PAR],
+     * same range [RoundAction.SetPar] enforces mid-round. No-op if [courseId]/[layoutId] don't
+     * resolve or [holeIndex] is out of bounds for that layout's hole count.
+     */
+    fun setLayoutPar(courseId: String, layoutId: String, holeIndex: Int, newPar: Int) {
         val clamped = newPar.coerceIn(MIN_PAR, MAX_PAR)
         _courses.update { list ->
             list.map { course ->
-                if (course.id == id && holeIndex in course.pars.indices) {
-                    course.copy(pars = course.pars.toMutableList().also { it[holeIndex] = clamped })
-                } else {
+                if (course.id != courseId) {
                     course
+                } else {
+                    course.copy(
+                        layouts = course.layouts.map { layout ->
+                            if (layout.id == layoutId && holeIndex in layout.pars.indices) {
+                                layout.copy(pars = layout.pars.toMutableList().also { it[holeIndex] = clamped })
+                            } else {
+                                layout
+                            }
+                        },
+                    )
                 }
             }
         }
@@ -179,30 +244,33 @@ class RoundViewModel(
     }
 
     /**
-     * Manually corrects this course's record holder name(s) — [CourseEditorScreen]'s free-text
-     * entry, comma-separated for a tie — the same manual-correction role [setCoursePar] plays for
-     * a wrong *learned* par (PLAN.md section 2 "Course record"). Each name is sanitized the same
-     * as a player/course name; blanks and duplicates are dropped. An empty result **clears** the
-     * record entirely (both holders and to-par) rather than leaving a nameless score behind —
-     * typed text that isn't blank is validated by the caller before this is invoked, so an empty
-     * result here specifically means the person cleared the field.
+     * Manually corrects [layoutId]'s record holder name(s) — [LayoutEditorScreen]'s free-text
+     * entry, comma-separated for a tie — the same manual-correction role [setLayoutPar] plays for
+     * a wrong *learned* par (PLAN.md section 2 "Course record"/"Layouts"). Each name is sanitized
+     * the same as a player/course/layout name; blanks and duplicates are dropped. An empty result
+     * **clears** the record entirely (both holders and to-par) rather than leaving a nameless score
+     * behind — typed text that isn't blank is validated by the caller before this is invoked, so an
+     * empty result here specifically means the person cleared the field.
      *
      * A newly-set holder list that had no prior to-par seeds one at even par (`0`) — the same
      * "reasonable starting guess, then nudge it" convention as an unlearned hole's par — for
-     * [setCourseRecordToPar] to adjust from. No-op if [id] isn't a saved course.
+     * [setLayoutRecordToPar] to adjust from. No-op if [courseId]/[layoutId] don't resolve.
      */
-    fun setCourseRecordHolders(id: String, rawNames: String) {
+    fun setLayoutRecordHolders(courseId: String, layoutId: String, rawNames: String) {
         val names = rawNames.split(",").map(::sanitizeName).filter { it.isNotEmpty() }.distinct()
         _courses.update { list ->
             list.map { course ->
-                if (course.id != id) {
+                if (course.id != courseId) {
                     course
-                } else if (names.isEmpty()) {
-                    course.copy(recordHolderNames = emptyList(), recordToPar = null)
                 } else {
                     course.copy(
-                        recordHolderNames = names,
-                        recordToPar = course.recordToPar ?: 0,
+                        layouts = course.layouts.map { layout ->
+                            when {
+                                layout.id != layoutId -> layout
+                                names.isEmpty() -> layout.copy(recordHolderNames = emptyList(), recordToPar = null)
+                                else -> layout.copy(recordHolderNames = names, recordToPar = layout.recordToPar ?: 0)
+                            }
+                        },
                     )
                 }
             }
@@ -211,22 +279,31 @@ class RoundViewModel(
     }
 
     /**
-     * Manually corrects this course's record to-par, clamped to a plausible whole-round range —
+     * Manually corrects [layoutId]'s record to-par, clamped to a plausible whole-round range —
      * each hole can swing from [MIN_STROKES] on a [MAX_PAR] hole to [MAX_STROKES] on a [MIN_PAR]
      * one, so `holeCount * (`[MIN_STROKES]` - `[MAX_PAR]`)..holeCount * (`[MAX_STROKES]` - `[MIN_PAR]`)`
-     * scales that per-hole swing up to a full card, the same way [setCoursePar]'s stroke clamp
-     * scales up. No-op if [id] isn't a saved course, or if it has no record holders yet — there's
-     * nothing sensible to attach a score to (set the holders first, via [setCourseRecordHolders]).
+     * scales that per-hole swing up to a full card, the same way [setLayoutPar]'s stroke clamp
+     * scales up. No-op if [courseId]/[layoutId] don't resolve, or if the layout has no record
+     * holders yet — there's nothing sensible to attach a score to (set the holders first, via
+     * [setLayoutRecordHolders]).
      */
-    fun setCourseRecordToPar(id: String, toPar: Int) {
+    fun setLayoutRecordToPar(courseId: String, layoutId: String, toPar: Int) {
         _courses.update { list ->
             list.map { course ->
-                if (course.id == id && course.recordHolderNames.isNotEmpty()) {
-                    val min = course.holeCount * (MIN_STROKES - MAX_PAR)
-                    val max = course.holeCount * (MAX_STROKES - MIN_PAR)
-                    course.copy(recordToPar = toPar.coerceIn(min, max))
-                } else {
+                if (course.id != courseId) {
                     course
+                } else {
+                    course.copy(
+                        layouts = course.layouts.map { layout ->
+                            if (layout.id == layoutId && layout.recordHolderNames.isNotEmpty()) {
+                                val min = layout.holeCount * (MIN_STROKES - MAX_PAR)
+                                val max = layout.holeCount * (MAX_STROKES - MIN_PAR)
+                                layout.copy(recordToPar = toPar.coerceIn(min, max))
+                            } else {
+                                layout
+                            }
+                        },
+                    )
                 }
             }
         }
@@ -235,9 +312,9 @@ class RoundViewModel(
 
     // ---- The active round ---------------------------------------------------------------------
 
-    /** Starts a fresh round on [course] with [players] — see [newRound]. Persists immediately, same as every other round mutation. */
-    fun startRound(course: Course, players: List<Player>) {
-        _round.value = newRound(course, players)
+    /** Starts a fresh round on [course], played on [layout], with [players] — see [newRound]. Persists immediately, same as every other round mutation. */
+    fun startRound(course: Course, layout: Layout, players: List<Player>) {
+        _round.value = newRound(course, layout, players)
         _justSetRecord.value = false
         persistRoundAndWriteBack()
     }
@@ -285,38 +362,48 @@ class RoundViewModel(
         applyParWriteBack(round)
     }
 
-    /** No-ops if [RoundState.courseId] no longer names a course in [courses] — PLAN.md section 4: "Par write-back... no-ops if that course has since been deleted." */
+    /**
+     * No-ops if [RoundState.courseId]/[RoundState.layoutId] no longer resolve to a saved course
+     * and layout — PLAN.md section 2: "Par write-back... no-ops if that course [or layout] has
+     * since been deleted."
+     */
     private fun applyParWriteBack(round: RoundState) {
         val courseId = round.courseId ?: return
+        val layoutId = round.layoutId ?: return
         val toLearn = round.parsToLearn()
         if (toLearn.isEmpty()) return
 
         val current = _courses.value
         val course = current.find { it.id == courseId } ?: return
+        val layout = course.layouts.find { it.id == layoutId } ?: return
 
-        val updatedPars = course.pars.toMutableList()
+        val updatedPars = layout.pars.toMutableList()
         for ((holeNumber, par) in toLearn) {
             val index = holeNumber - 1
             if (index in updatedPars.indices) updatedPars[index] = par
         }
-        if (updatedPars == course.pars) return // nothing actually changed — skip the write
+        if (updatedPars == layout.pars) return // nothing actually changed — skip the write
 
-        val updatedCourse = course.copy(pars = updatedPars)
+        val updatedLayout = layout.copy(pars = updatedPars)
+        val updatedCourse = course.copy(layouts = course.layouts.map { if (it.id == layoutId) updatedLayout else it })
         _courses.value = current.map { if (it.id == courseId) updatedCourse else it }
         persistCourses()
     }
 
     /**
-     * The automatic half of "Course record" (PLAN.md section 2): applies [recordAfterRound] for
-     * [round]'s course, if any, and returns whether it actually changed anything — [finishRound]
-     * uses that to drive [justSetRecord]. No-ops (and returns `false`) if [RoundState.courseId] no
-     * longer names a course in [courses], same as [applyParWriteBack].
+     * The automatic half of "Layout record" (PLAN.md section 2): applies [recordAfterRound] for
+     * [round]'s layout, if any, and returns whether it actually changed anything — [finishRound]
+     * uses that to drive [justSetRecord]. No-ops (and returns `false`) if [RoundState.courseId]/
+     * [RoundState.layoutId] no longer resolve, same as [applyParWriteBack].
      */
     private fun applyRecordWriteBack(round: RoundState): Boolean {
         val courseId = round.courseId ?: return false
+        val layoutId = round.layoutId ?: return false
         val course = _courses.value.find { it.id == courseId } ?: return false
-        val updated = recordAfterRound(course, round) ?: return false
-        _courses.value = _courses.value.map { if (it.id == courseId) updated else it }
+        val layout = course.layouts.find { it.id == layoutId } ?: return false
+        val updatedLayout = recordAfterRound(layout, round) ?: return false
+        val updatedCourse = course.copy(layouts = course.layouts.map { if (it.id == layoutId) updatedLayout else it })
+        _courses.value = _courses.value.map { if (it.id == courseId) updatedCourse else it }
         persistCourses()
         return true
     }

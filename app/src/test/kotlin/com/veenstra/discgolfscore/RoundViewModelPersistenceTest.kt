@@ -33,7 +33,8 @@ class RoundViewModelPersistenceTest {
         Dispatchers.resetMain()
     }
 
-    private val course = Course(id = "c1", name = "Riverside", holeCount = 3, pars = listOf(3, 4, 5))
+    private val layout = Layout(id = "l1", name = "18 holes", holeCount = 3, pars = listOf(3, 4, 5))
+    private val course = Course(id = "c1", name = "Riverside", layouts = listOf(layout))
     private val players = listOf(Player("p1", "Derek"), Player("p2", "Sam"))
 
     @Test
@@ -53,7 +54,7 @@ class RoundViewModelPersistenceTest {
 
     @Test
     fun `loads a persisted round on start and becomes ready`() {
-        val saved = newRound(course, players)
+        val saved = newRound(course, layout, players)
         val store = FakeRoundStore(initial = saved)
         val vm = RoundViewModel(roundStore = store)
 
@@ -66,7 +67,7 @@ class RoundViewModelPersistenceTest {
         val store = FakeRoundStore()
         val vm = RoundViewModel(roundStore = store)
 
-        vm.startRound(course, players)
+        vm.startRound(course, layout, players)
 
         assertEquals(vm.round.value, store.saved)
     }
@@ -75,7 +76,7 @@ class RoundViewModelPersistenceTest {
     fun `every round action persists the updated state`() {
         val store = FakeRoundStore()
         val vm = RoundViewModel(roundStore = store)
-        vm.startRound(course, players)
+        vm.startRound(course, layout, players)
 
         vm.setPar(4)
         assertEquals(4, store.saved!!.holes[0].par)
@@ -107,7 +108,7 @@ class RoundViewModelPersistenceTest {
     fun `finishing persists finished true`() {
         val store = FakeRoundStore()
         val vm = RoundViewModel(roundStore = store)
-        vm.startRound(course, players)
+        vm.startRound(course, layout, players)
 
         vm.finishRound()
 
@@ -117,7 +118,7 @@ class RoundViewModelPersistenceTest {
 
     @Test
     fun `a finished round is restored as finished on next start`() {
-        val finished = reduce(newRound(course, players), RoundAction.Finish)
+        val finished = reduce(newRound(course, layout, players), RoundAction.Finish)
         val store = FakeRoundStore(initial = finished)
         val vm = RoundViewModel(roundStore = store)
 
@@ -128,7 +129,7 @@ class RoundViewModelPersistenceTest {
     fun `actions on an already-finished round are no-ops, matching the pure reducer`() {
         val store = FakeRoundStore()
         val vm = RoundViewModel(roundStore = store)
-        vm.startRound(course, players)
+        vm.startRound(course, layout, players)
         vm.finishRound()
         val finishedState = vm.round.value
 
@@ -143,7 +144,7 @@ class RoundViewModelPersistenceTest {
     fun `DONE clears the round from state and storage`() {
         val store = FakeRoundStore()
         val vm = RoundViewModel(roundStore = store)
-        vm.startRound(course, players)
+        vm.startRound(course, layout, players)
         vm.finishRound()
 
         vm.done()
@@ -167,7 +168,7 @@ class RoundViewModelPersistenceTest {
         // once a round is finished. The ViewModel-level operation just clears whatever's there.
         val store = FakeRoundStore()
         val vm = RoundViewModel(roundStore = store)
-        vm.startRound(course, players)
+        vm.startRound(course, layout, players)
 
         vm.done()
 

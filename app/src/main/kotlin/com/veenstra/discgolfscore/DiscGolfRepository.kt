@@ -19,7 +19,12 @@ interface PlayerStore {
     suspend fun savePlayers(players: List<Player>)
 }
 
-/** Where the saved course list is loaded from and persisted to. Independent of [PlayerStore] for the same reason ultimate-score split its two preset lists: a player add/rename/delete has no reason to re-encode and rewrite the course list, or vice versa. */
+/**
+ * Where the saved course list — each course's [Course.layouts] included — is loaded from and
+ * persisted to. Independent of [PlayerStore] for the same reason ultimate-score split its two
+ * preset lists: a player add/rename/delete has no reason to re-encode and rewrite the course list,
+ * or vice versa.
+ */
 interface CourseStore {
     suspend fun loadCourses(): List<Course>
     suspend fun saveCourses(courses: List<Course>)
@@ -66,6 +71,18 @@ interface RoundHistoryStore {
 private const val FIELD_SEP = "" // Unit Separator — between fields of one record
 private const val RECORD_SEP = "" // Record Separator — between records
 
+/**
+ * Group Separator — between a course's individual [Layout] records within its own
+ * `layoutsBlob` (see [encodeCourses]), one level of nesting below [RECORD_SEP]. Layouts didn't
+ * exist when [FIELD_SEP]/[RECORD_SEP] were chosen (PLAN.md section 4 "Persistence"), and both
+ * are already spoken for one level up (fields-within-a-course-record and
+ * courses-within-the-list, respectively) — reusing either here would collide with that
+ * existing meaning instead of adding a new one, the same reasoning that kept the active
+ * round's three pieces in three separate preference keys rather than forcing a third meaning
+ * onto two characters (this file's "Active round" section, below).
+ */
+private const val GROUP_SEP = ""
+
 // ---- Players --------------------------------------------------------------------------------
 
 /** One player per record (`id`[US]`name`[US]`color`), records joined by RS. [Player.color] is a packed ARGB `Long`, always non-negative, so its decimal string is digits-only per PLAN.md section 4. Reused verbatim for the round's snapshot player list (`RoundState.players`) since it's the exact same [Player] shape. */
@@ -94,41 +111,78 @@ private fun decodePlayer(entry: String): Player? {
 }
 
 // ---- Courses ---------------------------------------------------------------------------------
+//
+// Layouts nest a list inside each course record, one level below where [Course.pars] and
+// [Course.recordHolderNames] used to live directly (see the PLAN.md section 2 "Layouts" data
+// split). RS still separates course records; [GROUP_SEP] separates the layout records within one
+// course's own `layoutsBlob`; FS still separates the fields of one record, whichever level it's
+// at — a course record's own 3 fields, or one layout's ~5+ fields inside the blob. A course
+// record's own FS-joined fields are decoded with `limit = 3` specifically so the third field
+// (`layoutsBlob`, itself full of FS characters from its nested layout records) is captured whole
+// rather than shredded by the same split.
+//
+// **Migration (PLAN.md section 2 "Migration").** Every course saved before this feature existed
+// is the *old* flat shape: `id`[FS]`name`[FS]`holeCount`[FS]`pars`[FS]`recordToPar`[FS]`holder`...
+// — no layout nesting at all. [NEW_COURSE_PREFIX] is a version tag that only ever appears on a
+// record this codec itself wrote in the *new* shape; a course id is always a wall-clock
+// millisecond count (PLAN.md section 4 "Persistence"), so it can never collide with the tag. Any
+// record not carrying the tag is decoded by [decodeLegacyCourseAndWrap], the untouched old
+// decoding logic, and wrapped into a course with exactly one generated [Layout] carrying that
+// course's old holeCount/pars/record — named by [defaultLayoutName] from its hole count, since
+// nothing typed a name for data that predates layouts. Nothing is lost, and the migrated layout
+// reuses the course's own id (stable across repeated loads, and there's nothing else it needs to
+// be distinct from yet).
 
-/**
- * One course per record, records joined by RS:
- * `id`[US]`name`[US]`holeCount`[US]`pars`[US]`recordToPar`[US]`holderName`[US]`holderName`…
- * [Course.pars] is digits-only, so it's plain-comma-joined per PLAN.md section 4. `recordToPar`
- * is empty when [Course.recordToPar] is `null`; unlike every other numeric field here it can be
- * negative (a record under par, the common case), so it's the one field allowed a leading `-`.
- * Record holder names are a *variable-length* trailing run of FS-separated fields (zero or more)
- * rather than comma-joined like [Course.pars] — a name isn't digits-only, so comma can't safely
- * stand in as its separator, but FS already can: [sanitizeName] guarantees no name ever contains a
- * control character, the same guarantee [Player]'s own FS-joined fields already lean on.
- */
+private const val COURSE_FORMAT_TAG = "C2"
+private val NEW_COURSE_PREFIX = COURSE_FORMAT_TAG + FIELD_SEP
+
 internal fun encodeCourses(courses: List<Course>): String =
-    courses.joinToString(RECORD_SEP) { c ->
-        (
-            listOf(c.id, c.name, c.holeCount.toString(), c.pars.joinToString(","), c.recordToPar?.toString() ?: "") +
-                c.recordHolderNames
-            ).joinToString(FIELD_SEP)
-    }
+    courses.joinToString(RECORD_SEP, transform = ::encodeCourse)
+
+private fun encodeCourse(c: Course): String {
+    val layoutsBlob = c.layouts.joinToString(GROUP_SEP, transform = ::encodeLayoutFields)
+    return listOf(COURSE_FORMAT_TAG, c.id, c.name, layoutsBlob).joinToString(FIELD_SEP)
+}
+
+/** One [Layout]'s fields, FS-joined — the exact shape a whole course record used to be, minus the id/name (a layout's own [Layout.id]/[Layout.name] take their place here instead). */
+private fun encodeLayoutFields(l: Layout): String =
+    (
+        listOf(l.id, l.name, l.holeCount.toString(), l.pars.joinToString(","), l.recordToPar?.toString() ?: "") +
+            l.recordHolderNames
+        ).joinToString(FIELD_SEP)
 
 internal fun decodeCourses(raw: String?): List<Course> {
     if (raw.isNullOrBlank()) return emptyList()
     return raw.split(RECORD_SEP).mapNotNull(::decodeCourse)
 }
 
+private fun decodeCourse(entry: String): Course? =
+    if (entry.startsWith(NEW_COURSE_PREFIX)) decodeNewCourse(entry) else decodeLegacyCourseAndWrap(entry)
+
+/** New-shape course record: `C2`[FS]`id`[FS]`name`[FS]`layoutsBlob`, dropped if malformed, if it has no id/name, or if it has zero layouts (a course is never layout-less by construction). */
+private fun decodeNewCourse(entry: String): Course? {
+    val parts = entry.removePrefix(NEW_COURSE_PREFIX).split(FIELD_SEP, limit = 3)
+    if (parts.size != 3) return null
+    val id = parts[0]
+    val name = parts[1]
+    if (id.isBlank() || name.isBlank()) return null
+    val layoutsBlob = parts[2]
+    if (layoutsBlob.isEmpty()) return null
+    val layouts = layoutsBlob.split(GROUP_SEP).map { decodeLayoutFields(it) ?: return null }
+    if (layouts.isEmpty()) return null
+    return Course(id, name, layouts)
+}
+
 /**
- * Malformed entries are dropped rather than crashing: too few fields, blank id/name, a
- * non-numeric or non-positive hole count, a non-numeric par, a par list whose length disagrees
- * with the hole count, or a non-numeric `recordToPar`. Zero and negative values are both valid
- * to-par scores, so unlike the other numeric fields there's no positivity check. An empty
- * `recordToPar` field means no record — any trailing holder-name fields are then ignored rather
- * than treated as malformed, since a stray leftover there is harmless and not worth losing the
- * whole course over.
+ * Decodes one layout's FS-joined fields. Malformed entries are dropped rather than crashing: too
+ * few fields, blank id/name, a non-numeric or non-positive hole count, a non-numeric par, a par
+ * list whose length disagrees with the hole count, or a non-numeric `recordToPar`. Zero and
+ * negative values are both valid to-par scores, so unlike the other numeric fields there's no
+ * positivity check. An empty `recordToPar` field means no record — any trailing holder-name fields
+ * are then ignored rather than treated as malformed, since a stray leftover there is harmless and
+ * not worth losing the whole layout over.
  */
-private fun decodeCourse(entry: String): Course? {
+private fun decodeLayoutFields(entry: String): Layout? {
     val parts = entry.split(FIELD_SEP)
     if (parts.size < 5) return null
     val id = parts[0]
@@ -144,7 +198,40 @@ private fun decodeCourse(entry: String): Course? {
     val recordField = parts[4]
     val recordToPar = if (recordField.isEmpty()) null else recordField.toIntOrNull() ?: return null
     val recordHolderNames = if (recordToPar == null) emptyList() else parts.drop(5).filter { it.isNotBlank() }
-    return Course(id, name, holeCount, parsInts, recordHolderNames, recordToPar)
+    return Layout(id, name, holeCount, parsInts, recordHolderNames, recordToPar)
+}
+
+/**
+ * The pre-layouts course shape, decoded exactly as it always was, then wrapped into a course with
+ * one generated layout (PLAN.md section 2 "Migration"). Kept byte-for-byte identical to the old
+ * `decodeCourse` logic on purpose: this is reading data nothing will ever write again, so its
+ * field rules must stay frozen even as [decodeNewCourse]'s evolve.
+ */
+private fun decodeLegacyCourseAndWrap(entry: String): Course? {
+    val parts = entry.split(FIELD_SEP)
+    if (parts.size < 5) return null
+    val id = parts[0]
+    val name = parts[1]
+    if (id.isBlank() || name.isBlank()) return null
+    val holeCount = parts[2].toIntOrNull() ?: return null
+    if (holeCount <= 0) return null
+    val parsField = parts[3]
+    val pars = if (parsField.isEmpty()) emptyList() else parsField.split(",").map { it.toIntOrNull() }
+    if (pars.any { it == null }) return null
+    val parsInts = pars.filterNotNull()
+    if (parsInts.size != holeCount) return null
+    val recordField = parts[4]
+    val recordToPar = if (recordField.isEmpty()) null else recordField.toIntOrNull() ?: return null
+    val recordHolderNames = if (recordToPar == null) emptyList() else parts.drop(5).filter { it.isNotBlank() }
+    val layout = Layout(
+        id = id,
+        name = defaultLayoutName(holeCount),
+        holeCount = holeCount,
+        pars = parsInts,
+        recordHolderNames = recordHolderNames,
+        recordToPar = recordToPar,
+    )
+    return Course(id, name, listOf(layout))
 }
 
 // ---- Active round ------------------------------------------------------------------------------
@@ -160,22 +247,42 @@ private fun decodeCourse(entry: String): Course? {
 // asked for.
 // ---------------------------------------------------------------------------------------------
 
-/** The round's scalar fields, one record: `courseId`[US]`courseName`[US]`currentHole`[US]`finished`. `courseId` empty means `null` (a blank id never comes from [Course]'s own decode, so this is unambiguous). */
+/**
+ * The round's scalar fields, one record: `courseId`[US]`courseName`[US]`currentHole`[US]`finished`,
+ * plus two trailing fields added for layouts, `layoutId`[US]`layoutName` (PLAN.md section 2
+ * "RoundState snapshots the layout"). `courseId`/`layoutId` empty means `null` (a blank id never
+ * comes from [Course]'s or [Layout]'s own decode, so this is unambiguous).
+ */
 internal fun encodeRoundMeta(round: RoundState): String =
     listOf(
         round.courseId ?: "",
         round.courseName,
         round.currentHole.toString(),
         if (round.finished) "1" else "0",
+        round.layoutId ?: "",
+        round.layoutName,
     ).joinToString(FIELD_SEP)
 
-private data class RoundMeta(val courseId: String?, val courseName: String, val currentHole: Int, val finished: Boolean)
+private data class RoundMeta(
+    val courseId: String?,
+    val courseName: String,
+    val currentHole: Int,
+    val finished: Boolean,
+    val layoutId: String?,
+    val layoutName: String,
+)
 
-/** Malformed meta (wrong field count, blank course name, non-numeric current hole, unrecognized finished flag) decodes to `null`. */
+/**
+ * Malformed meta (wrong field count, blank course name, non-numeric current hole, unrecognized
+ * finished flag) decodes to `null`. Accepts **two** field counts on purpose: 4, the shape every
+ * round saved before this feature existed used, decodes with no layout (`layoutId = null`,
+ * `layoutName = ""`) rather than being rejected as malformed — PLAN.md section 2 "old saved rounds
+ * must still display sensibly". 6 is the current shape, with the two layout fields appended.
+ */
 private fun decodeRoundMeta(raw: String?): RoundMeta? {
     if (raw.isNullOrBlank()) return null
     val parts = raw.split(FIELD_SEP)
-    if (parts.size != 4) return null
+    if (parts.size != 4 && parts.size != 6) return null
     val courseId = parts[0].ifEmpty { null }
     val courseName = parts[1]
     if (courseName.isBlank()) return null
@@ -185,7 +292,9 @@ private fun decodeRoundMeta(raw: String?): RoundMeta? {
         "0" -> false
         else -> return null
     }
-    return RoundMeta(courseId, courseName, currentHole, finished)
+    val layoutId = if (parts.size == 6) parts[4].ifEmpty { null } else null
+    val layoutName = if (parts.size == 6) parts[5] else ""
+    return RoundMeta(courseId, courseName, currentHole, finished, layoutId, layoutName)
 }
 
 /**
@@ -207,6 +316,8 @@ internal fun decodeRound(metaRaw: String?, playersRaw: String?, holesRaw: String
         holes = holes,
         currentHole = meta.currentHole,
         finished = meta.finished,
+        layoutId = meta.layoutId,
+        layoutName = meta.layoutName,
     )
 }
 

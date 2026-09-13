@@ -15,7 +15,10 @@ class RoundReducerTest {
         holeCount: Int = 3,
         pars: List<Int> = List(holeCount) { 0 },
         players: List<Player> = listOf(derek, sam),
-    ): RoundState = newRound(Course("c1", "Riverside", holeCount, pars), players)
+    ): RoundState {
+        val layout = Layout("l1", "18 holes", holeCount, pars)
+        return newRound(Course("c1", "Riverside", listOf(layout)), layout, players)
+    }
 
     // ---- Adjust: clamping ----------------------------------------------------------------
 

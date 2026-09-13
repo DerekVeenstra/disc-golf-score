@@ -73,7 +73,7 @@ fun PastRoundsScreen(
                         val saved = history[index]
                         PickableRow(
                             label = saved.round.courseName,
-                            detail = formatRoundDate(saved.finishedAt),
+                            detail = formatPastRoundDetail(saved),
                             selected = false,
                             onClick = { mode = PastRoundsMode.Viewing(saved.id) },
                         )
@@ -118,4 +118,10 @@ fun PastRoundsScreen(
             }
         }
     }
+}
+
+/** A listing row's detail line: the layout name and finish date, or just the date for a round saved before layouts existed ([RoundState.layoutName] blank — PLAN.md section 2 "RoundState snapshots the layout"). */
+private fun formatPastRoundDetail(saved: SavedRound): String {
+    val date = formatRoundDate(saved.finishedAt)
+    return if (saved.round.layoutName.isNotBlank()) "${saved.round.layoutName} · $date" else date
 }

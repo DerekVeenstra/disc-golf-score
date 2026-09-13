@@ -23,21 +23,27 @@ import androidx.wear.compose.material3.Text
 /**
  * The setup flow is several screens modeled as one piece of local Compose state within this file
  * (mirrors ultimate-score's private `SetupMode`, PLAN.md section 13) rather than a second
- * `AppScreen` case — creating/editing a course or player here is a detour from this screen, not a
- * new place in the app.
+ * `AppScreen` case — creating/editing a course, layout, or player here is a detour from this
+ * screen, not a new place in the app.
  */
 private sealed interface SetupMode {
     data object Picking : SetupMode
     data class ChoosingHoleCount(val courseName: String) : SetupMode
+    data class PickingLayout(val courseId: String) : SetupMode
     data class EditingCourse(val courseId: String) : SetupMode
     data class EditingPlayer(val playerId: String) : SetupMode
 }
 
 /**
- * Pick a course (single-select), tick players (multi-select), `START` (PLAN.md section 3
- * "New round setup"). `onStart` is a stub in Phase 4 — the hole screen it would open is Phase 5 —
- * so this screen's only real job here is getting enabled/disabled and the two selection models
- * right.
+ * Pick a course (single-select), resolve which layout to play (PLAN.md section 2 "Round setup is
+ * course → layout, with a skip"), tick players (multi-select), `START`.
+ *
+ * Picking a course whose [Course.layouts] has exactly one member resolves [selectedLayoutId]
+ * immediately, with no extra screen — single-layout courses feel exactly as they did before
+ * layouts existed. Two or more layouts routes to [SetupMode.PickingLayout] ([LayoutPickerScreen])
+ * first; only once that screen calls back with a chosen layout do both [selectedCourseId] and
+ * [selectedLayoutId] update together, so a course is never shown "picked" while its layout is
+ * still unresolved.
  */
 @Composable
 fun NewRoundSetupScreen(
@@ -45,18 +51,33 @@ fun NewRoundSetupScreen(
     players: List<Player>,
     onAddCourse: (name: String, holeCount: Int) -> Course?,
     onRenameCourse: (id: String, name: String) -> Unit,
-    onSetCoursePar: (id: String, holeIndex: Int, newPar: Int) -> Unit,
+    onAddLayout: (courseId: String, name: String, holeCount: Int) -> Layout?,
+    onRenameLayout: (courseId: String, layoutId: String, name: String) -> Unit,
+    onDeleteLayout: (courseId: String, layoutId: String) -> Unit,
+    onSetLayoutPar: (courseId: String, layoutId: String, holeIndex: Int, newPar: Int) -> Unit,
+    onSetLayoutRecordHolders: (courseId: String, layoutId: String, rawNames: String) -> Unit,
+    onSetLayoutRecordToPar: (courseId: String, layoutId: String, toPar: Int) -> Unit,
     onDeleteCourse: (id: String) -> Unit,
-    onSetCourseRecordHolders: (id: String, rawNames: String) -> Unit,
-    onSetCourseRecordToPar: (id: String, toPar: Int) -> Unit,
     onAddPlayer: (name: String) -> Player?,
     onRenamePlayer: (id: String, name: String) -> Unit,
     onDeletePlayer: (id: String) -> Unit,
-    onStart: (courseId: String, playerIds: Set<String>) -> Unit,
+    onStart: (courseId: String, layoutId: String, playerIds: Set<String>) -> Unit,
 ) {
     var mode by remember { mutableStateOf<SetupMode>(SetupMode.Picking) }
     var selectedCourseId by remember { mutableStateOf<String?>(null) }
+    var selectedLayoutId by remember { mutableStateOf<String?>(null) }
     var selectedPlayerIds by remember { mutableStateOf<Set<String>>(emptySet()) }
+
+    // Delete-clears-selection (PLAN.md section 3), extended to a layout deleted out from under an
+    // already-resolved selection (e.g. via ManageCoursesScreen elsewhere in the same session) — the
+    // course's own deletion is still handled inline where it's deleted, below; this only guards the
+    // one-level-deeper case a plain `find` can't catch by itself.
+    LaunchedEffect(courses, selectedCourseId, selectedLayoutId) {
+        val course = selectedCourseId?.let { id -> courses.find { it.id == id } }
+        if (selectedLayoutId != null && course != null && course.layouts.none { it.id == selectedLayoutId }) {
+            selectedLayoutId = null
+        }
+    }
 
     val newCourseNameLauncher = rememberTextInputLauncher(label = "Course name") { typed ->
         val trimmed = typed?.trim()
@@ -68,21 +89,6 @@ fun NewRoundSetupScreen(
             val player = onAddPlayer(trimmed)
             if (player != null) selectedPlayerIds = selectedPlayerIds + player.id
         }
-    }
-    // Reused for renaming whichever course is currently being edited — which one is read off
-    // `mode` itself when the result comes back, the same one-launcher-covers-both-sides call
-    // ultimate-score's rename launcher makes (PLAN.md section 13).
-    val renameCourseLauncher = rememberTextInputLauncher(label = "Course name") { typed ->
-        val editing = mode as? SetupMode.EditingCourse ?: return@rememberTextInputLauncher
-        val trimmed = typed?.trim()
-        if (!trimmed.isNullOrEmpty()) onRenameCourse(editing.courseId, trimmed)
-    }
-    // Unlike the rename launcher above, a blank result here is meaningful (it clears the record)
-    // rather than ignored — see RoundViewModel.setCourseRecordHolders — so every non-cancelled
-    // result is passed through.
-    val recordHoldersLauncher = rememberTextInputLauncher(label = "Record holder(s)") { typed ->
-        val editing = mode as? SetupMode.EditingCourse ?: return@rememberTextInputLauncher
-        if (typed != null) onSetCourseRecordHolders(editing.courseId, typed)
     }
     val renamePlayerLauncher = rememberTextInputLauncher(label = "Player name") { typed ->
         val editing = mode as? SetupMode.EditingPlayer ?: return@rememberTextInputLauncher
@@ -96,7 +102,15 @@ fun NewRoundSetupScreen(
             players = players,
             selectedCourseId = selectedCourseId,
             selectedPlayerIds = selectedPlayerIds,
-            onSelectCourse = { id -> selectedCourseId = id },
+            onSelectCourse = { course ->
+                val singleLayout = course.layouts.singleOrNull()
+                if (singleLayout != null) {
+                    selectedCourseId = course.id
+                    selectedLayoutId = singleLayout.id
+                } else {
+                    mode = SetupMode.PickingLayout(course.id)
+                }
+            },
             onTogglePlayer = { id ->
                 selectedPlayerIds = if (id in selectedPlayerIds) selectedPlayerIds - id else selectedPlayerIds + id
             },
@@ -106,38 +120,69 @@ fun NewRoundSetupScreen(
             onAddPlayer = { newPlayerNameLauncher(null) },
             onStart = {
                 val courseId = selectedCourseId
-                if (courseId != null && selectedPlayerIds.isNotEmpty()) onStart(courseId, selectedPlayerIds)
+                val layoutId = selectedLayoutId
+                if (courseId != null && layoutId != null && selectedPlayerIds.isNotEmpty()) {
+                    onStart(courseId, layoutId, selectedPlayerIds)
+                }
             },
-            canStart = selectedCourseId != null && selectedPlayerIds.isNotEmpty(),
+            canStart = selectedCourseId != null && selectedLayoutId != null && selectedPlayerIds.isNotEmpty(),
         )
 
         is SetupMode.ChoosingHoleCount -> HoleCountPickerScreen(
-            courseName = current.courseName,
+            subjectName = current.courseName,
             onCreate = { holeCount ->
                 val course = onAddCourse(current.courseName, holeCount)
-                if (course != null) selectedCourseId = course.id
+                if (course != null) {
+                    selectedCourseId = course.id
+                    selectedLayoutId = course.layouts.single().id // just-created courses always have exactly one
+                }
                 mode = SetupMode.Picking
             },
             onCancel = { mode = SetupMode.Picking },
         )
 
+        is SetupMode.PickingLayout -> {
+            val liveCourse = courses.find { it.id == current.courseId }
+            if (liveCourse != null) {
+                LayoutPickerScreen(
+                    course = liveCourse,
+                    selectedLayoutId = selectedLayoutId,
+                    onSelectLayout = { layoutId ->
+                        selectedCourseId = liveCourse.id
+                        selectedLayoutId = layoutId
+                        mode = SetupMode.Picking
+                    },
+                    onAddLayout = { name, holeCount -> onAddLayout(liveCourse.id, name, holeCount) },
+                    onCancel = { mode = SetupMode.Picking },
+                )
+            } else {
+                LaunchedEffect(Unit) { mode = SetupMode.Picking }
+            }
+        }
+
         is SetupMode.EditingCourse -> {
             // Re-read the live course every recomposition (not the snapshot captured when this
-            // mode was entered) so a par edit shows up immediately in this same screen.
+            // mode was entered) so a layout/par edit shows up immediately in this same screen.
             val live = courses.find { it.id == current.courseId }
             if (live != null) {
                 CourseEditorScreen(
                     course = live,
-                    onRename = { renameCourseLauncher(live.name) },
-                    onEditRecord = { recordHoldersLauncher(live.recordHolderNames.joinToString(", ")) },
-                    onSetRecordToPar = { toPar -> onSetCourseRecordToPar(live.id, toPar) },
-                    onSetPar = { holeIndex, newPar -> onSetCoursePar(live.id, holeIndex, newPar) },
-                    onDelete = {
+                    onRenameCourse = onRenameCourse,
+                    onAddLayout = onAddLayout,
+                    onRenameLayout = onRenameLayout,
+                    onDeleteLayout = onDeleteLayout,
+                    onSetLayoutPar = onSetLayoutPar,
+                    onSetLayoutRecordHolders = onSetLayoutRecordHolders,
+                    onSetLayoutRecordToPar = onSetLayoutRecordToPar,
+                    onDeleteCourse = {
                         onDeleteCourse(live.id)
                         // Delete-clears-selection (PLAN.md section 3): deleting the selected
                         // course must leave no course selected, re-disabling START. This is the
                         // exact bug ultimate-score section 13 fixed.
-                        if (selectedCourseId == live.id) selectedCourseId = null
+                        if (selectedCourseId == live.id) {
+                            selectedCourseId = null
+                            selectedLayoutId = null
+                        }
                         mode = SetupMode.Picking
                     },
                     onDone = { mode = SetupMode.Picking },
@@ -179,7 +224,7 @@ private fun PickingScreen(
     players: List<Player>,
     selectedCourseId: String?,
     selectedPlayerIds: Set<String>,
-    onSelectCourse: (String) -> Unit,
+    onSelectCourse: (Course) -> Unit,
     onTogglePlayer: (String) -> Unit,
     onLongPressCourse: (Course) -> Unit,
     onLongPressPlayer: (Player) -> Unit,
@@ -203,7 +248,7 @@ private fun PickingScreen(
                     label = course.name,
                     selected = selectedCourseId == course.id,
                     leading = if (selectedCourseId == course.id) "●" else "○",
-                    onClick = { onSelectCourse(course.id) },
+                    onClick = { onSelectCourse(course) },
                     onLongClick = { onLongPressCourse(course) },
                 )
             }

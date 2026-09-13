@@ -104,18 +104,22 @@ fun WearApp(viewModel: RoundViewModel = rememberRoundViewModel()) {
                 players = players,
                 onAddCourse = viewModel::addCourse,
                 onRenameCourse = viewModel::renameCourse,
-                onSetCoursePar = viewModel::setCoursePar,
+                onAddLayout = viewModel::addLayout,
+                onRenameLayout = viewModel::renameLayout,
+                onDeleteLayout = viewModel::deleteLayout,
+                onSetLayoutPar = viewModel::setLayoutPar,
+                onSetLayoutRecordHolders = viewModel::setLayoutRecordHolders,
+                onSetLayoutRecordToPar = viewModel::setLayoutRecordToPar,
                 onDeleteCourse = viewModel::deleteCourse,
-                onSetCourseRecordHolders = viewModel::setCourseRecordHolders,
-                onSetCourseRecordToPar = viewModel::setCourseRecordToPar,
                 onAddPlayer = viewModel::addPlayer,
                 onRenamePlayer = viewModel::renamePlayer,
                 onDeletePlayer = viewModel::deletePlayer,
-                onStart = { courseId, playerIds ->
+                onStart = { courseId, layoutId, playerIds ->
                     val course = courses.find { it.id == courseId }
+                    val layout = course?.layouts?.find { it.id == layoutId }
                     val chosenPlayers = players.filter { it.id in playerIds }
-                    if (course != null && chosenPlayers.isNotEmpty()) {
-                        viewModel.startRound(course, chosenPlayers)
+                    if (course != null && layout != null && chosenPlayers.isNotEmpty()) {
+                        viewModel.startRound(course, layout, chosenPlayers)
                         screen = AppScreen.Hole
                     }
                 },
@@ -160,10 +164,13 @@ fun WearApp(viewModel: RoundViewModel = rememberRoundViewModel()) {
                 courses = courses,
                 onAddCourse = viewModel::addCourse,
                 onRenameCourse = viewModel::renameCourse,
-                onSetCoursePar = viewModel::setCoursePar,
+                onAddLayout = viewModel::addLayout,
+                onRenameLayout = viewModel::renameLayout,
+                onDeleteLayout = viewModel::deleteLayout,
+                onSetLayoutPar = viewModel::setLayoutPar,
+                onSetLayoutRecordHolders = viewModel::setLayoutRecordHolders,
+                onSetLayoutRecordToPar = viewModel::setLayoutRecordToPar,
                 onDeleteCourse = viewModel::deleteCourse,
-                onSetCourseRecordHolders = viewModel::setCourseRecordHolders,
-                onSetCourseRecordToPar = viewModel::setCourseRecordToPar,
                 onDone = { screen = AppScreen.Home },
             )
         }

@@ -165,13 +165,13 @@ class RoundViewModelRosterTest {
     // ---- Courses -------------------------------------------------------------------------------
 
     @Test
-    fun `adding a course creates it with every hole unlearned`() {
+    fun `adding a course creates it with one auto-named layout, every hole unlearned`() {
         val store = FakeCourseStore()
         val vm = RoundViewModel(courseStore = store, idGenerator = idSequence())
 
         val created = vm.addCourse("Riverside", 3)
 
-        assertEquals(Course("id-0", "Riverside", 3, listOf(0, 0, 0)), created)
+        assertEquals(Course("id-1", "Riverside", listOf(Layout("id-0", "3 holes", 3, listOf(0, 0, 0)))), created)
         assertEquals(listOf(created), vm.courses.value)
         assertEquals(listOf(created), store.saved)
     }
@@ -186,7 +186,7 @@ class RoundViewModelRosterTest {
     }
 
     @Test
-    fun `renaming a course updates state and persists, leaving its pars alone`() {
+    fun `renaming a course updates state and persists, leaving its layouts alone`() {
         val store = FakeCourseStore()
         val vm = RoundViewModel(courseStore = store, idGenerator = idSequence())
         val original = vm.addCourse("Riverside", 2)!!
@@ -195,7 +195,7 @@ class RoundViewModelRosterTest {
 
         val renamed = vm.courses.value.single()
         assertEquals("Riverside Park", renamed.name)
-        assertEquals(original.pars, renamed.pars)
+        assertEquals(original.layouts, renamed.layouts)
         assertEquals(listOf(renamed), store.saved)
     }
 
@@ -212,21 +212,141 @@ class RoundViewModelRosterTest {
         assertEquals(listOf(keep), store.saved)
     }
 
+    // ---- Layouts (PLAN.md section 2 "Layouts") ------------------------------------------------
+
+    @Test
+    fun `addLayout appends a new, unlearned layout to the course`() {
+        val store = FakeCourseStore()
+        val vm = RoundViewModel(courseStore = store, idGenerator = idSequence())
+        val course = vm.addCourse("Columbia Lake", 18)!! // id-0 (first layout), id-1 (course)
+
+        val created = vm.addLayout(course.id, "9 short reds", 9)
+
+        assertEquals(Layout("id-2", "9 short reds", 9, List(9) { 0 }), created)
+        val updated = vm.courses.value.single()
+        assertEquals(2, updated.layouts.size)
+        assertEquals(created, updated.layouts[1])
+        assertEquals(listOf(updated), store.saved)
+    }
+
+    @Test
+    fun `addLayout with a blank name is a no-op`() {
+        val store = FakeCourseStore()
+        val vm = RoundViewModel(courseStore = store, idGenerator = idSequence())
+        val course = vm.addCourse("Riverside", 18)!!
+
+        assertNull(vm.addLayout(course.id, "   ", 9))
+        assertEquals(1, vm.courses.value.single().layouts.size)
+    }
+
+    @Test
+    fun `addLayout with a non-positive hole count is a no-op`() {
+        val store = FakeCourseStore()
+        val vm = RoundViewModel(courseStore = store, idGenerator = idSequence())
+        val course = vm.addCourse("Riverside", 18)!!
+
+        assertNull(vm.addLayout(course.id, "Extra", 0))
+        assertEquals(1, vm.courses.value.single().layouts.size)
+    }
+
+    @Test
+    fun `addLayout for an unknown course id is a no-op`() {
+        val store = FakeCourseStore()
+        val vm = RoundViewModel(courseStore = store, idGenerator = idSequence())
+
+        assertNull(vm.addLayout("not-a-real-id", "Extra", 9))
+        assertTrue(vm.courses.value.isEmpty())
+    }
+
+    @Test
+    fun `renameLayout updates just that layout's name`() {
+        val store = FakeCourseStore()
+        val vm = RoundViewModel(courseStore = store, idGenerator = idSequence())
+        val course = vm.addCourse("Riverside", 18)!!
+        val layout = course.layouts.single()
+
+        vm.renameLayout(course.id, layout.id, "18 long blues")
+
+        assertEquals("18 long blues", vm.courses.value.single().layouts.single().name)
+    }
+
+    @Test
+    fun `renameLayout with a blank name is a no-op`() {
+        val store = FakeCourseStore()
+        val vm = RoundViewModel(courseStore = store, idGenerator = idSequence())
+        val course = vm.addCourse("Riverside", 18)!!
+        val layout = course.layouts.single()
+
+        vm.renameLayout(course.id, layout.id, "   ")
+
+        assertEquals(layout.name, vm.courses.value.single().layouts.single().name)
+    }
+
+    @Test
+    fun `deleteLayout removes a non-last layout`() {
+        val store = FakeCourseStore()
+        val vm = RoundViewModel(courseStore = store, idGenerator = idSequence())
+        val course = vm.addCourse("Columbia Lake", 18)!!
+        val second = vm.addLayout(course.id, "9 short reds", 9)!!
+
+        vm.deleteLayout(course.id, second.id)
+
+        assertEquals(1, vm.courses.value.single().layouts.size)
+        assertEquals(listOf(vm.courses.value.single()), store.saved)
+    }
+
+    @Test
+    fun `deleteLayout on a course's only layout is blocked -- PLAN section 2, Deleting a layout`() {
+        val store = FakeCourseStore()
+        val vm = RoundViewModel(courseStore = store, idGenerator = idSequence())
+        val course = vm.addCourse("Riverside", 18)!!
+        val onlyLayout = course.layouts.single()
+
+        vm.deleteLayout(course.id, onlyLayout.id)
+
+        assertEquals(listOf(onlyLayout), vm.courses.value.single().layouts)
+    }
+
+    @Test
+    fun `setLayoutPar overwrites one hole's learned par, clamped to the valid range`() {
+        val store = FakeCourseStore()
+        val vm = RoundViewModel(courseStore = store, idGenerator = idSequence())
+        val course = vm.addCourse("Riverside", 3)!!
+        val layout = course.layouts.single()
+
+        vm.setLayoutPar(course.id, layout.id, 0, 9) // clamps to MAX_PAR (5)
+
+        assertEquals(listOf(5, 0, 0), vm.courses.value.single().layouts.single().pars)
+    }
+
+    @Test
+    fun `setLayoutPar with an out-of-bounds hole index is a no-op`() {
+        val store = FakeCourseStore()
+        val vm = RoundViewModel(courseStore = store, idGenerator = idSequence())
+        val course = vm.addCourse("Riverside", 3)!!
+        val layout = course.layouts.single()
+
+        vm.setLayoutPar(course.id, layout.id, 99, 4)
+
+        assertEquals(layout.pars, vm.courses.value.single().layouts.single().pars)
+    }
+
     // ---- Par write-back (PLAN.md section 4 "Par write-back to a course happens here too") -----
 
     @Test
-    fun `par write-back teaches an unlearned, reached hole's par to its course`() {
+    fun `par write-back teaches an unlearned, reached hole's par to its layout`() {
         val courseStore = FakeCourseStore()
         val vm = RoundViewModel(courseStore = courseStore, idGenerator = idSequence())
         val course = vm.addCourse("Riverside", 3)!! // pars [0, 0, 0]
+        val layout = course.layouts.single()
         val players = listOf(Player("p1", "Derek"))
 
-        vm.startRound(course, players)
+        vm.startRound(course, layout, players)
         vm.setPar(4) // hole 1, unlearned, reached -- should teach par 4 back
 
-        val updated = vm.courses.value.single { it.id == course.id }
+        val updated = vm.courses.value.single { it.id == course.id }.layouts.single()
         assertEquals(listOf(4, 0, 0), updated.pars)
-        assertEquals(updated, courseStore.saved.single())
+        assertEquals(vm.courses.value.single(), courseStore.saved.single())
     }
 
     @Test
@@ -234,27 +354,45 @@ class RoundViewModelRosterTest {
         val courseStore = FakeCourseStore()
         val vm = RoundViewModel(courseStore = courseStore, idGenerator = idSequence())
         val course = vm.addCourse("Riverside", 3)!! // pars [0, 0, 0]
+        val layout = course.layouts.single()
         val players = listOf(Player("p1", "Derek"))
 
-        vm.startRound(course, players)
+        vm.startRound(course, layout, players)
         vm.finishRound() // finished on hole 1 -- holes 2 and 3 never reached
 
-        val updated = vm.courses.value.single { it.id == course.id }
+        val updated = vm.courses.value.single { it.id == course.id }.layouts.single()
         assertEquals(listOf(3, 0, 0), updated.pars) // only hole 1 (reached, default par 3) learned
     }
 
     @Test
-    fun `par write-back does not re-teach a hole the course already knew at round start`() {
-        val courseStore = FakeCourseStore(initial = listOf(Course("c1", "Riverside", 2, listOf(4, 5))))
+    fun `par write-back does not re-teach a hole the layout already knew at round start`() {
+        val layout = Layout("l1", "18 holes", 2, listOf(4, 5))
+        val courseStore = FakeCourseStore(initial = listOf(Course("c1", "Riverside", listOf(layout))))
         val vm = RoundViewModel(courseStore = courseStore, idGenerator = idSequence())
         val course = vm.courses.value.single()
         val players = listOf(Player("p1", "Derek"))
 
-        vm.startRound(course, players)
+        vm.startRound(course, layout, players)
         vm.setPar(3) // changing an already-learned hole's par mid-round -- round-only, per "learn once"
 
+        val updated = vm.courses.value.single().layouts.single()
+        assertEquals(listOf(4, 5), updated.pars) // unchanged -- the layout never re-learns hole 1
+    }
+
+    @Test
+    fun `par write-back does not touch a sibling layout of the same course`() {
+        val store = FakeCourseStore()
+        val vm = RoundViewModel(courseStore = store, idGenerator = idSequence())
+        val course = vm.addCourse("Columbia Lake", 3)!! // first layout: pars [0, 0, 0]
+        val sibling = vm.addLayout(course.id, "9 short reds", 2)!! // pars [0, 0]
+        val players = listOf(Player("p1", "Derek"))
+
+        vm.startRound(course, sibling, players)
+        vm.setPar(4) // learns onto the sibling only
+
         val updated = vm.courses.value.single()
-        assertEquals(listOf(4, 5), updated.pars) // unchanged -- the course never re-learns hole 1
+        assertEquals(listOf(0, 0, 0), updated.layouts[0].pars) // untouched
+        assertEquals(listOf(4, 0), updated.layouts[1].pars)
     }
 
     @Test
@@ -262,9 +400,10 @@ class RoundViewModelRosterTest {
         val courseStore = FakeCourseStore()
         val vm = RoundViewModel(courseStore = courseStore, idGenerator = idSequence())
         val course = vm.addCourse("Riverside", 3)!!
+        val layout = course.layouts.single()
         val players = listOf(Player("p1", "Derek"))
 
-        vm.startRound(course, players)
+        vm.startRound(course, layout, players)
         vm.deleteCourse(course.id) // course gone mid-round -- the round keeps its snapshot courseId
 
         val saveCountBeforeSetPar = courseStore.saveCount
@@ -272,6 +411,21 @@ class RoundViewModelRosterTest {
 
         assertTrue(vm.courses.value.none { it.id == course.id }) // still deleted
         assertEquals(saveCountBeforeSetPar, courseStore.saveCount) // no extra course save happened
+    }
+
+    @Test
+    fun `par write-back no-ops if the round's layout was deleted mid-round but the course remains`() {
+        val store = FakeCourseStore()
+        val vm = RoundViewModel(courseStore = store, idGenerator = idSequence())
+        val course = vm.addCourse("Columbia Lake", 3)!!
+        val firstLayout = course.layouts.single()
+        vm.addLayout(course.id, "9 short reds", 2) // a second layout, so the first can be deleted
+        vm.startRound(course, firstLayout, listOf(Player("p1", "Derek")))
+
+        vm.deleteLayout(course.id, firstLayout.id)
+        vm.setPar(4) // would otherwise teach hole 1's par back onto the now-deleted layout
+
+        assertTrue(vm.courses.value.single().layouts.none { it.id == firstLayout.id })
     }
 
     @Test
@@ -284,9 +438,10 @@ class RoundViewModelRosterTest {
         val courseStore = FakeCourseStore()
         val vm = RoundViewModel(courseStore = courseStore, idGenerator = idSequence())
         val course = vm.addCourse("Riverside", 3)!!
+        val layout = course.layouts.single()
         val derek = Player("p1", "Derek")
         val sam = Player("p2", "Sam")
-        vm.startRound(course, listOf(derek, sam))
+        vm.startRound(course, layout, listOf(derek, sam))
 
         vm.deleteCourse(course.id) // gone mid-round; the round keeps its own snapshot
 
@@ -306,6 +461,7 @@ class RoundViewModelRosterTest {
         assertTrue(finished.finished)
         assertEquals("Riverside", finished.courseName) // snapshot survives the course's deletion
         assertEquals(course.id, finished.courseId) // courseId kept, even though it no longer resolves
+        assertEquals(layout.name, finished.layoutName) // layout snapshot survives too
 
         // The score itself is right: hole 1 Derek=2, Sam=5; hole 2 Derek=3 (untouched default),
         // Sam=4; hole 3 both untouched default par 3. Totals: Derek 2+3+3=8, Sam 5+4+3=12.
@@ -330,8 +486,9 @@ class RoundViewModelRosterTest {
         val courseStore = FakeCourseStore()
         val vm = RoundViewModel(courseStore = courseStore, idGenerator = idSequence())
         val course = vm.addCourse("Riverside", 3)!! // pars [0, 0, 0]
+        val layout = course.layouts.single()
         val players = listOf(Player("p1", "Derek"))
-        vm.startRound(course, players)
+        vm.startRound(course, layout, players)
 
         vm.setPar(4) // hole 1 -> 4
         vm.nextHole()
@@ -339,7 +496,7 @@ class RoundViewModelRosterTest {
         vm.nextHole()
         // hole 3 left untouched -- learns the default par 3 once reached (PLAN.md section 4).
 
-        val updated = vm.courses.value.single { it.id == course.id }
+        val updated = vm.courses.value.single { it.id == course.id }.layouts.single()
         assertEquals(listOf(4, 5, 3), updated.pars)
     }
 }

@@ -2,9 +2,10 @@
 
 **Status:** Phases 1–6 done — skeleton, domain model + reducer, DataStore persistence + ViewModel,
 roster/setup UI, the hole screen (segmented par selector, scoring, standings, finish flow), and the
-real final scoreboard with `RESUME`, deleted-course resume, and every named edge state verified, with
-110 green JVM tests. Phase 7 (real device) is next.
-**Last updated:** 2026-09-09
+real final scoreboard with `RESUME`, deleted-course resume, and every named edge state verified.
+The **Layouts** feature (a course as a container of layouts — see section 2) landed on top of that
+on 2026-09-13, with 201 green JVM tests. Phase 7 (real device) is next.
+**Last updated:** 2026-09-13
 **Target device:** TicWatch Pro 5 Enduro (primary, confirmed hardware), any Wear OS 3+ smartwatch (secondary)
 **Project dir:** `/Users/derekveenstra/dev/disc-golf-score`
 **Sibling project:** `/Users/derekveenstra/dev/ultimate-score` — same hardware, same toolchain, same
@@ -63,7 +64,14 @@ Everything in this table that isn't marked "inherited" was chosen by Derek durin
 | **Player count** | No cap | Row height and scrolling are sized to work for any number; nothing in the layout assumes a maximum |
 | **Round history** | **Kept.** A round is saved to history the moment it's finished; `DONE` clears only the active round. Listed under Home's `PAST ROUNDS` | Originally "not kept" to keep v1 small; added at Derek's request on 2026-09-11 |
 | **Course record** | Shown on the courses manager and the course editor: best score ever carded on that course *relative to par*, and who holds it (every tied holder, not just one). Kept as fields on `Course` (`recordHolderNames`/`recordToPar`), advanced automatically when a round finishes, and correctable by hand from the course editor | Added at Derek's request on 2026-09-11, **stored rather than derived** — revised the same day once Derek asked for hand-editing: a purely derived value (recomputed from `history`) can't be corrected without editing history itself, so the record moved onto `Course`, the exact same "learned automatically, fixed by hand in the course editor" shape as a learned par (§2 "Why par is learned instead of entered up front"). Automatic advancement (`recordAfterRound`) only counts a round that reached every hole, for the same reason `strokesThrough`/`toPar` already only count holes reached — an early finish's partial total isn't comparable to a full round's. **Changed to relative-to-par** on 2026-09-12 at Derek's request (was raw stroke total): a record now means the same thing across courses of different lengths and survives a learned par later being corrected, matching the app's own convention that "to-par is what's shown" (§3 "Final scoreboard"). |
-| **Course record fanfare** | A gold "🏆 NEW COURSE RECORD!" banner on the final scoreboard, shown once, only on the live finish that actually advanced the record | Added at Derek's request on 2026-09-11, alongside the manual-edit change above. Tracked as `RoundViewModel.justSetRecord`, an in-memory flag set the moment `finishRound()`'s write-back changes something and cleared on the next `startRound`/`done` — deliberately not persisted, so a force-stop right after finishing costs the celebration but nothing else. `PastRoundsScreen` reopening an old record-holding round never shows it: revisiting a record later isn't the moment it was set. |
+| **Course record fanfare** | A gold "🏆 NEW COURSE RECORD!" banner on the final scoreboard, shown once, only on the live finish that actually advanced the record | Added at Derek's request on 2026-09-11, alongside the manual-edit change above. Tracked as `RoundViewModel.justSetRecord`, an in-memory flag set the moment `finishRound()`'s write-back changes something and cleared on the next `startRound`/`done` — deliberately not persisted, so a force-stop right after finishing costs the celebration but nothing else. `PastRoundsScreen` reopening an old record-holding round never shows it: revisiting a record later isn't the moment it was set. **Superseded 2026-09-13** — see "Layout record fanfare" below; the banner text changed but the tracking mechanism didn't. |
+| **Layouts (the concept)** | A course becomes a container of layouts — "Columbia Lake" is a course; "9 short red tees" and "18 long blues" are two layouts of it. **Rounds are played against a layout, not a course.** | Added at Derek's request on 2026-09-13. Real courses have more than one usable configuration (different tee pads, different pin placements, a short/long variant), and forcing each onto its own separate `Course` would mean re-entering the same physical location under a different name every time, plus scattering that course's rounds across multiple unrelated "courses" in history and the manager. |
+| **Layout data split** | `Course` becomes `Course(id, name, layouts: List<Layout>)`. New `Layout(id, name, holeCount, pars, recordHolderNames, recordToPar)` — exactly the five fields, no starting-hole offset, no explicit typed par total. `Course` itself now holds nothing but identity and grouping. | Hole count, learned pars, and the record are properties of *how a round is played*, which is what a layout is — sibling layouts of the same course must learn independently (a par corrected on "18 long blues" must not touch "9 short reds"), so each of those fields has to live on `Layout`, not `Course`. Tee/pin detail deliberately has no dedicated field: it goes in the layout's `name` instead, the same way it always implicitly lived in a course's name before layouts existed. |
+| **Layout hole count immutability** | Hole count stays immutable after a layout is created, for the same reason it was immutable on a course (see "Course editing" above) | Now that hole count is a property of the layout rather than the course, creating a *new layout* is the supported way to get a different hole count at the same course — nothing new needed inventing, the existing "create another one" escape hatch just moved down a level. |
+| **Migration (courses → layouts)** | The DataStore codec reads the old flat on-disk course shape and auto-wraps it: each existing course becomes a course with exactly one layout carrying that course's old `holeCount`/`pars`/`recordHolderNames`/`recordToPar`. The generated layout is named by hole count (`defaultLayoutName` — `"18 holes"`, `"9 holes"`, `"1 hole"`) and reuses the course's own id. Detected by a version-tag prefix (`"C2"` + the field separator) on every record this codec itself writes — a course id is always a wall-clock millisecond count, so it can never collide with the tag, making old vs. new format unambiguous from the string alone with no separate schema-version field. | Nothing may be lost migrating existing users' saved courses onto the new shape, and the migration has to be pure-function testable (feed the old serialized form in, assert the wrapped result) without a live DataStore. A version tag was chosen over trying to structurally infer old-vs-new from field counts because layouts nest one more level than a flat course record did — an unambiguous, explicit marker beats a heuristic that would only work by coincidence of the two shapes' field counts never aligning. |
+| **Round setup: course → layout, with a skip** | Picking a course whose `layouts.size == 1` goes straight to ticking players, no layout picker shown — single-layout courses feel exactly as they did before layouts existed. Two or more layouts opens a layout-picker step listing them, plus a "+ New layout…" entry (mirroring "+ New course…"'s inline name → hole count flow). | The common case (a course really does have just one layout) must not grow an extra tap just because the feature exists. A picker only appears when there's an actual decision to make, which is also when skipping it silently would be wrong (guessing a layout on someone's behalf isn't safe the way skipping is for one option). |
+| **Deleting a layout** | Blocked outright if it would leave a course with zero layouts, rather than deleting the whole course along with its last layout | Blocking is simpler and strictly safer: it can never destroy a course's saved-round history or its other layouts as a side effect of removing one, and there is always an obvious, discoverable fix (delete the course itself, from the courses manager, if that's really what's wanted) rather than a silent cascade. |
+| **Layout record fanfare wording** | The final scoreboard's fanfare banner reads "🏆 NEW LAYOUT RECORD!", one consistent wording regardless of how many layouts the course has | A record is now tracked per layout (see the data split above), so "course record" stopped being accurate the moment a course could have more than one. Deliberately **not** special-cased for the common single-layout course — one wording that's technically correct everywhere beats a wording that reads better half the time and requires a branch to get there. |
 | **Finished round persistence** | The finished round stays in storage until `DONE` is pressed | Right-swipe dismisses the app and can't be rebound; an accidental swipe on the final card must not destroy it. Relaunching returns to the scoreboard. |
 | **Finishing** | Both paths confirm — early finish *and* the last hole's `FINISH` | Both are the point of no return; only one of them being guarded is arbitrary |
 | **Ties on the scoreboard** | Shared rank (`1, 1, 3`) | It's a tie; showing one of them as second is wrong |
@@ -173,6 +181,12 @@ disabled until a course and at least one player are chosen.
   is the exact bug ultimate-score §13 fixed, doubled here by having two selection models.
 - `START` is an `EdgeButton` pinned to the bottom edge, so a long roster never puts it out of reach.
 
+**Superseded 2026-09-13 by the Layouts phase log below.** Picking a course now resolves a layout
+too before `START` enables — automatically, with no extra screen, when the course has exactly one
+layout (the mockup above still describes this case exactly), or via one extra layout-picker step
+when it has more than one. "Long-press a course row → edit pars" became "→ manage its layouts,"
+each of which is where pars/record now live. See the phase log for the exact new screen shapes.
+
 ### Hole (the main screen)
 
 ```
@@ -251,7 +265,10 @@ One scrolling list, one pinned edge button:
 - **Course record fanfare** (§2 "Course record fanfare"): a gold `🏆 NEW COURSE RECORD!` banner
   between `FINAL` and the standings, shown only when *this* finish is the one that just advanced
   the course record — never on a relaunch that lands back here after the fact, and never when
-  re-opening the same round later from `PAST ROUNDS`.
+  re-opening the same round later from `PAST ROUNDS`. **Superseded 2026-09-13**: the banner now
+  reads `🏆 NEW LAYOUT RECORD!` (§2 "Layout record fanfare wording"), and a non-blank layout name
+  shows in smaller text under the course name — blank (no second line) for a round saved before
+  layouts existed.
 
 ### Past rounds
 
@@ -260,6 +277,9 @@ with the date it was finished underneath. Tapping one re-opens the same final sc
 ended on (plus the date), with a `Delete round` row below the standings. Deleting asks first — a
 round, unlike a player or course, can't be recreated. A round finished early is saved as it was
 finished: its totals count only the holes it reached, exactly like its final scoreboard did.
+
+**Superseded 2026-09-13**: a row's detail line becomes `<layout name> · <date>` when the round has
+a non-blank layout name, and just the date otherwise (a round saved before layouts existed).
 
 ### Players / Courses managers
 
@@ -298,6 +318,13 @@ Same one-line row shape and horizontal inset as the hole screen's player rows �
 solution, and it should be the same composable. Unlearned holes show their par-3 default; editing
 one marks it learned. Hole count is displayed but not editable (§2).
 
+**Superseded 2026-09-13 by the Layouts phase log below.** Everything this subsection describes —
+the record row, the `To par` stepper, and the hole-by-hole par list — moved one level down onto a
+new `LayoutEditorScreen`, reached by tapping a layout listed in `CourseEditorScreen` rather than
+being drawn directly on the course editor; the mechanics (text-entry rename, the stepper shape, the
+par list, hole count shown but not editable) are otherwise unchanged, just re-scoped from "the
+course" to "the layout you tapped." See the phase log for the exact new screen shapes.
+
 ---
 
 ## 4. Architecture
@@ -329,13 +356,21 @@ data class Player(val id: String, val name: String)
 data class Course(
     val id: String,
     val name: String,
-    val holeCount: Int,               // 1..36, typically 9 or 18
+    val layouts: List<Layout>,        // never empty — see §2 "Deleting a layout"
+)
+
+data class Layout(
+    val id: String,
+    val name: String,                 // e.g. "9 short reds", "18 long blues"
+    val holeCount: Int,               // 1..36, typically 9 or 18; immutable after creation
     val pars: List<Int>,              // size == holeCount; 0 = not yet learned
+    val recordHolderNames: List<String> = emptyList(),
+    val recordToPar: Int? = null,
 )
 
 data class HoleScore(
     val par: Int,
-    val wasLearnedAtStart: Boolean,   // did the course already know this hole's par?
+    val wasLearnedAtStart: Boolean,   // did the layout already know this hole's par?
     val strokes: Map<String, Int>,    // playerId -> strokes, always populated
     val touched: Set<String>,         // playerIds a human has adjusted — no visual, see §2
 )
@@ -347,20 +382,32 @@ data class RoundState(
     val holes: List<HoleScore>,       // size == holeCount
     val currentHole: Int,             // 1-based
     val finished: Boolean = false,
+    val layoutId: String? = null,     // nullable/defaulted so a pre-layouts saved round still decodes
+    val layoutName: String = "",      // "" means "nothing to show" (pre-layouts round, or deleted layout)
 ) {
     fun strokesThrough(playerId: String): Int      // holes 1..currentHole
     fun toPar(playerId: String): Int               // strokes - par, holes 1..currentHole
 }
 ```
 
+A course is a container of layouts — "Columbia Lake" is a course; "9 short red tees" and "18 long
+blues" are two layouts of it (§2 "Layouts") — and **a round is played against a layout, not a
+course**. Hole count, learned pars, and the record all live on `Layout`, independently per layout,
+for the same "learn once, correct by hand" reasons §2 gives for why par is learned and why the
+record is stored rather than derived; `Course` itself carries nothing but identity and grouping.
+
 Players are **snapshotted into the round** rather than referenced by id into the live roster, so
-renaming or deleting a player mid-round can't corrupt a card in progress. `courseName` is
-snapshotted for the same reason; `courseId` is kept only for the par write-back, which no-ops if
-that course is gone.
+renaming or deleting a player mid-round can't corrupt a card in progress. `courseName`/`layoutName`
+are snapshotted for the same reason — as **two separate fields**, not one combined string, so the
+UI can render them at different sizes (§3's final scoreboard) and so `courseName` keeps its
+pre-layouts field name, letting an old saved round deserialize with a blank `layoutName` rather than
+breaking. `courseId`/`layoutId` are kept only for the par/record write-back, which no-ops if that
+course or layout is gone.
 
 `wasLearnedAtStart` is what makes "learn once" (§2) a property of the model rather than of the UI:
 the write-back fires only for holes where it's `false`, so a par changed on an already-learned hole
-never escapes the round it was changed in.
+never escapes the round it was changed in. This now targets the round's layout, not its course —
+sibling layouts of the same course learn independently.
 
 `finished` is persisted like everything else — a finished round survives until `DONE` explicitly
 clears it, which is what makes an accidental right-swipe on the final card harmless (§3).
@@ -427,9 +474,19 @@ escaping scheme:
 - Plain commas *inside* a digits-only field (par lists, stroke lists) — safe, since no user text
   reaches there
 
-`sanitizeName()` strips control characters from any name before a `Player` or `Course` is
-constructed, so the guarantee holds at the source rather than at encode time. Malformed records are
-dropped, never thrown on.
+`sanitizeName()` strips control characters from any name before a `Player`, `Course`, or `Layout`
+is constructed, so the guarantee holds at the source rather than at encode time. Malformed records
+are dropped, never thrown on.
+
+**A third separator, `U+001D` (Group Separator), was added for layouts** (§2 "Layouts"): a course
+record now nests a list of layout records one level below where `Course.pars`/
+`Course.recordHolderNames` used to live directly, and `U+001F`/`U+001E` were already spoken for one
+level up (fields-within-a-record and records-within-the-list). A version tag (`"C2"` plus the field
+separator) prefixes every course record this codec writes in the new nested shape; any record
+without it is the old flat pre-layouts shape, decoded by its original, frozen logic and wrapped into
+a course with one generated layout (§2 "Migration") — a course id is always a wall-clock millisecond
+count, so it can never collide with the tag, and old and new formats can coexist in the same stored
+string with no separate schema-version field anywhere.
 
 The active round is written on **every** action. A round is ~18 holes × ~4 players; the cost is
 irrelevant and the guarantee is worth it. It's read once at startup before first composition, so
@@ -1705,4 +1762,146 @@ tests were required, matching the task's own expectation that most of this phase
    for Phase 7.
 
 Co-Authored-By: Claude Sonnet 5 <noreply@anthropic.com>
+
+---
+
+## Layouts phase log ✅ done (2026-09-13)
+
+A course became a container of layouts (§2 "Layouts"): "Columbia Lake" is a course, "9 short red
+tees" and "18 long blues" are two layouts of it, and **a round is now played against a layout, not
+a course**. Built on top of Phases 1–6 without revisiting any of their own decisions.
+
+### What was built
+
+**Model.** New `Layout.kt` (`Layout(id, name, holeCount, pars, recordHolderNames, recordToPar)` —
+exactly the five fields, no starting-hole offset, no explicit par total — plus `defaultLayoutName`,
+`"18 holes"`/`"9 holes"`/`"1 hole"` from a hole count). `Course.kt` shrank to
+`Course(id, name, layouts: List<Layout>)`. `CourseRecord.kt` was renamed to `LayoutRecord.kt` and
+retargeted at `Layout` (`recordAfterRound` now compares `round.layoutId`, not `round.courseId`, so
+sibling layouts of the same course learn independent records); it also gained `courseListDetail`
+for the courses manager's per-row detail line. `RoundState` gained `layoutId`/`layoutName`
+(defaulted, trailing fields — `courseName` kept its exact old name and position so old call sites
+and old saved data don't have to change shape). `newRound` now takes `(course, layout, players)`.
+
+**Persistence.** `DiscGolfRepository.kt`'s course codec now nests each course's layouts one level
+down, using a third separator (`U+001D`, `GROUP_SEP`) between layout records inside a course
+record's own FS-joined fields (decoded with `split(limit = 3)` so the nested blob survives the
+outer split intact). **Migration**: every course record this codec writes now starts with a
+version tag (`"C2"` + the field separator); anything without that tag is the old flat pre-layouts
+shape (a course id is always a millisecond timestamp, so it can never collide with the tag) and is
+decoded by `decodeLegacyCourseAndWrap` — the original decode logic, untouched, kept as its own
+private function specifically so it stays frozen even as the new format's decoding evolves — then
+wrapped into a `Course` with one `Layout` named by `defaultLayoutName` from its old hole count,
+reusing the course's own id as the layout's id. Old and new formats can coexist in the same stored
+string (exercised directly in the codec tests) since decoding is per-record. `RoundState`'s meta
+record grew two trailing fields (`layoutId`/`layoutName`); `decodeRoundMeta` accepts both the old
+4-field shape (decodes with `layoutId = null`, `layoutName = ""`) and the new 6-field one, so a
+round saved before this phase still loads and still displays (course name only, no layout line).
+
+**ViewModel.** `RoundViewModel.addCourse` now creates a course with one auto-named layout. New
+`addLayout`/`renameLayout`/`deleteLayout`/`setLayoutPar`/`setLayoutRecordHolders`/
+`setLayoutRecordToPar`, all scoped by `(courseId, layoutId)`. `deleteLayout` is a no-op if it would
+leave the course with zero layouts (§2 "Deleting a layout"). `startRound` takes a `Layout` parameter.
+`applyParWriteBack`/`applyRecordWriteBack` resolve `courseId` → `layoutId` → the actual `Layout`
+before writing, no-op-ing at any broken link (deleted course, deleted layout) — the exact same
+"snapshot the id, no-op if it's gone" shape §4 already used for courses.
+
+**UI.**
+- `NewCourseFlow.kt`'s `HoleCountPickerScreen` renamed its parameter `courseName` → `subjectName`
+  (it's shown for a new layout's hole count too now) — otherwise unchanged, confirming it really
+  was already reusable.
+- New `LayoutEditorScreen.kt`: what used to be `CourseEditorScreen`'s record row/stepper/par list,
+  moved onto a layout and given its own rename/record text-input launchers internally.
+- `CourseEditorScreen.kt` rewritten: rename the course, list its layouts (each showing
+  `formatLayoutRecord`), "+ New layout…" (name → `HoleCountPickerScreen`), tap/long-press a layout
+  → `LayoutEditorScreen`, delete course. Owns every launcher both screens need internally, rather
+  than leaving them to its two call sites, so growing a second level of editable entity didn't
+  double the plumbing at every caller.
+- New `LayoutPickerScreen.kt`: the layout-picker step for round setup (below), with its own
+  "+ New layout…" mirroring "+ New course…"'s inline flow.
+- `ManageCoursesScreen.kt`: simplified to just wire courses + the new layout callbacks through to
+  `CourseEditorScreen`; its row detail is now `courseListDetail`.
+- `NewRoundSetupScreen.kt`: course-pick now resolves a layout too. A single-layout course resolves
+  it immediately with no new screen (§2 "Round setup: course → layout, with a skip"); two or more
+  routes through `SetupMode.PickingLayout`/`LayoutPickerScreen` first, and only then does
+  `selectedCourseId`/`selectedLayoutId` update together. `onStart` now carries a `layoutId`.
+- `FinishedRoundScreen.kt`: banner text `🏆 NEW LAYOUT RECORD!`; a non-blank `layoutName` renders
+  under the course name, smaller — nothing shown for a pre-layouts round.
+- `PastRoundsScreen.kt`: a listing row's detail becomes `<layout name> · <date>`, or just the date
+  for a pre-layouts round.
+- `WearApp.kt`: rewired for every new/renamed callback; `onStart` resolves both the course and the
+  layout before calling `viewModel.startRound(course, layout, players)`.
+
+### Judgment calls
+
+1. **Course creation stayed name → hole count → create**, auto-naming the first layout by hole
+   count, rather than also asking for a first layout's name. The task's own instructions preferred
+   this path explicitly ("keeps the watch flow shortest… preferred, with layouts added afterward
+   from the course editor"), and it's the exact shape the pre-layouts migration already uses, so
+   creating a course today and migrating an old one now produce identically-shaped data.
+2. **Deleting a course's last layout is blocked, not cascaded into deleting the course.** Also the
+   task's own stated preference ("blocking is simpler and safer, prefer that"). The "Delete layout"
+   row is hidden entirely on a course's only layout rather than shown disabled — this app has no
+   existing precedent for a visibly-disabled list row, and hiding the option is the more common
+   pattern used elsewhere here (`◂ prev hole`/`Finish round` conditionally appear on the hole
+   screen, `RESUME` conditionally appears on Home).
+3. **Migration format detection uses an explicit version-tag prefix**, not a structural guess
+   (e.g. field-count heuristics). Layouts nest one level deeper than a flat course record did, so a
+   heuristic would only work by coincidence of the two shapes' field counts never lining up — an
+   explicit tag is unambiguous by construction and is exactly what a real format migration uses.
+   The migrated layout **reuses its course's own id** — simple, deterministic across repeated
+   loads, and there's nothing yet that needs it to be distinct from the course id.
+4. **A malformed layout invalidates its whole course on decode**, rather than dropping just that
+   layout and keeping the rest. Mirrors the existing rule for a corrupt hole inside a round ("a
+   card missing a hole in the middle can't be trusted to mean anything") — a course missing one of
+   its layouts for no visible reason isn't obviously safer than not loading it at all, and the
+   existing codec had no precedent for "partially recover one record."
+5. **`courseListDetail`** (the courses-manager row's detail line) shows the single layout's own
+   record for a single-layout course — identical to the pre-layouts behavior — and a layout count
+   (`"2 layouts"`) for a multi-layout course, rather than guessing which sibling's record to show.
+6. **The layout-picker step is local Compose state** (`SetupMode.PickingLayout` /
+   `LayoutPickerScreen`), not a new `AppScreen` case — consistent with how `HoleCountPickerScreen`
+   and every other in-flow detour in this app already works; the sealed `AppScreen` router itself
+   needed no changes for this entire feature.
+7. **Deleting a layout that's currently selected mid-setup** clears just `selectedLayoutId` via a
+   `LaunchedEffect` invariant check (`courses`/`selectedCourseId`/`selectedLayoutId`) rather than
+   bespoke logic in the delete callback — the course-deletion case keeps its existing inline
+   handling unchanged; this only covers the one-level-deeper case a plain `find` can't.
+
+### Left out / not done
+
+- **Hole count changes remain impossible even via layouts** — exactly as intended (§2): a
+  different hole count is a new layout, not an edit. No new escape hatch was added or considered.
+- **No UI affordance for reordering layouts** — they display in creation order, matching how
+  players/courses already have no reorder anywhere in this app.
+- **No attempt to detect or merge "the same layout typed twice"** — same as courses and players
+  today, a duplicate name is just two rows; not a layouts-specific gap.
+- **PLAN.md section 3's ASCII mockups were annotated with pointers to this log rather than fully
+  redrawn** — the "Course editor"/"New round setup"/"Final scoreboard"/"Past rounds" prose now each
+  carry a short "Superseded 2026-09-13" note describing what changed, but the original mockups were
+  left in place as history rather than replaced, matching how earlier phase logs in this file layer
+  on top of section 3 rather than rewriting it.
+
+### Verified
+
+- `./gradlew testDebugUnitTest` — **BUILD SUCCESSFUL, 201 tests, 0 failures** (up from 168), on a
+  full `clean` build (not incremental/up-to-date).
+- `./gradlew assembleDebug` — **BUILD SUCCESSFUL** on the same clean build, confirming every new
+  Compose screen (`LayoutEditorScreen`, `LayoutPickerScreen`, the `CourseEditorScreen`/
+  `ManageCoursesScreen`/`NewRoundSetupScreen`/`FinishedRoundScreen`/`PastRoundsScreen`/`WearApp`
+  rewrites) compiles.
+- New/rewritten test coverage: `LayoutRecordTest` (replaces `CourseRecordTest`, adds sibling-layout
+  isolation and `courseListDetail` cases), `DiscGolfPersistenceCodecTest` (new-format round trips,
+  a corrupt-layout-drops-the-whole-course case, and a dedicated migration section feeding the exact
+  pre-layouts on-disk shape in and asserting the wrapped result — including a mixed old+new string
+  in one blob), `RoundViewModelRosterTest`/`RoundViewModelRecordTest` (layout CRUD, write-back
+  targeting the right layout, write-back no-oping on a deleted layout with the course still present,
+  sibling-layout isolation for both par write-back and the record), `RoundStateTest`/
+  `RoundReducerTest`/`ScoreboardTest` (updated to build a `Layout` + `Course` instead of a flat
+  `Course`, otherwise unchanged since the reducer itself never touches courses/layouts).
+- Not verified on-device or on the emulator (no watch/AVD available in this session) — same
+  limitation the task's own "do NOT try to install on the watch" scope accepted.
+
+Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01TEDLsQq1WQW53xkJAc5dhA
 Claude-Session: https://claude.ai/code/session_01TEDLsQq1WQW53xkJAc5dhA

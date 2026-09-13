@@ -14,8 +14,9 @@ class ScoreboardTest {
     /** Builds a one-hole (par 4) round where each player's final strokes are exactly as given. */
     private fun roundWithStrokes(vararg strokes: Pair<Player, Int>): RoundState {
         val players = strokes.map { it.first }
-        val course = Course("c1", "Riverside", holeCount = 1, pars = listOf(4))
-        val round = newRound(course, players)
+        val layout = Layout("l1", "18 holes", holeCount = 1, pars = listOf(4))
+        val course = Course("c1", "Riverside", listOf(layout))
+        val round = newRound(course, layout, players)
         return round.copy(
             holes = listOf(round.holes[0].copy(strokes = strokes.associate { it.first.id to it.second })),
         )
@@ -95,8 +96,9 @@ class ScoreboardTest {
 
     @Test
     fun `scoreboard respects the same currentHole boundary as toPar`() {
-        val course = Course("c1", "Riverside", holeCount = 3, pars = listOf(4, 4, 4))
-        var round = newRound(course, listOf(alex, sam))
+        val layout = Layout("l1", "18 holes", holeCount = 3, pars = listOf(4, 4, 4))
+        val course = Course("c1", "Riverside", listOf(layout))
+        var round = newRound(course, layout, listOf(alex, sam))
         round = round.copy(
             holes = listOf(
                 round.holes[0].copy(strokes = mapOf("p1" to 3, "p2" to 5)), // Alex ahead

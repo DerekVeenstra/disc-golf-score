@@ -24,16 +24,21 @@ private const val MIN_HOLE_COUNT = 1
 private const val MAX_HOLE_COUNT = 36
 
 /**
- * Step two of course creation (PLAN.md section 3 "New round setup" / section 2 "Course
- * creation"): the name is already typed (step one is just [rememberTextInputLauncher]), now pick
- * a hole count — `9`, `18`, or custom via `±`. Shared between the new-round setup screen's
- * "+ New course…" and the courses manager's, the same inline-create-then-select shape as
- * ultimate-score's colour-picking step (PLAN.md section 13). **Hole count is set here and never
- * again** (PLAN.md section 2 "Course editing") — there is deliberately no way to reach this screen
- * for a course that already exists.
+ * Step two of course *or layout* creation (PLAN.md section 3 "New round setup" / section 2 "Course
+ * creation", "Layouts"): the name is already typed (step one is just [rememberTextInputLauncher]),
+ * now pick a hole count — `9`, `18`, or custom via `±`. Shared across every place something gets a
+ * hole count — the new-round setup screen's "+ New course…", the courses manager's, and a course
+ * editor's "+ New layout…" — the same inline-create-then-select shape as ultimate-score's
+ * colour-picking step (PLAN.md section 13). **Hole count is set here and never again** for
+ * whichever layout it ends up on (PLAN.md section 2 "Course editing", carried onto [Layout]) —
+ * there is deliberately no way to reach this screen for a layout that already exists; a different
+ * hole count means creating a new one.
+ *
+ * [subjectName] is only ever shown back to the person as "Holes on “X”" — it names whatever [name]
+ * was just typed for (a new course or a new layout), not necessarily a course.
  */
 @Composable
-fun HoleCountPickerScreen(courseName: String, onCreate: (holeCount: Int) -> Unit, onCancel: () -> Unit) {
+fun HoleCountPickerScreen(subjectName: String, onCreate: (holeCount: Int) -> Unit, onCancel: () -> Unit) {
     var holeCount by remember { mutableIntStateOf(18) }
     val listState = rememberTransformingLazyColumnState()
 
@@ -45,7 +50,7 @@ fun HoleCountPickerScreen(courseName: String, onCreate: (holeCount: Int) -> Unit
         ) {
             item {
                 Text(
-                    text = "Holes on “$courseName”",
+                    text = "Holes on “$subjectName”",
                     fontSize = 14.sp,
                     fontWeight = FontWeight.Bold,
                     textAlign = TextAlign.Center,
