@@ -2,6 +2,10 @@
 
     <uses-feature android:name="android.hardware.type.watch" />
 
+    <!-- Cloud saves (CLOUD_SAVES.md): the watch talks to a Google Apps Script /exec endpoint over
+         plain HTTPS. Not present before this feature (section 5 item 9). -->
+    <uses-permission android:name="android.permission.INTERNET" />
+
     <application
         android:allowBackup="true"
         android:icon="@mipmap/ic_launcher"
@@ -22,5 +26,14 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
+
+        <!-- Cloud saves config, set only by an explicit `adb shell am broadcast -n
+             com.veenstra.discgolfscore/.SyncConfigReceiver ...` (see SyncConfigReceiver's own
+             doc comment for the exact command). exported="true" is required for adb (running as a
+             different uid than the app) to reach this receiver at all; there is no intent-filter,
+             so no other app can trigger it without also naming this exact component. -->
+        <receiver
+            android:name=".SyncConfigReceiver"
+            android:exported="true" />
     </application>
 </manifest>

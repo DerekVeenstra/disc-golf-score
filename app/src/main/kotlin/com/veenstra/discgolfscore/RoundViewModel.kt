@@ -24,15 +24,24 @@ import kotlinx.coroutines.launch
  *   parameter so tests can supply a fixed color instead.
  * @param clock the current time in epoch milliseconds, stamped onto a round as it's saved to
  *   history. A parameter for the same reason as [idGenerator].
+ * @param syncConfigStore where the cloud-saves endpoint (`CLOUD_SAVES.md` section 6 Phase B) is
+ *   loaded from, `null` in every test that isn't exercising sync itself — same optionality as
+ *   every other store parameter here.
+ * @param backupClientFactory builds a [BackupClient] bound to one [SyncConfig]'s `url`/`secret`,
+ *   called fresh by [backUpNow]/[restore] each time rather than held for the ViewModel's lifetime
+ *   (see [BackupClient]'s own doc for why). Defaults to a real [HttpBackupClient]; tests supply a
+ *   fake instead, the same seam every other store interface in this class gets.
  */
 class RoundViewModel(
     private val playerStore: PlayerStore? = null,
     private val courseStore: CourseStore? = null,
     private val roundStore: RoundStore? = null,
     private val historyStore: RoundHistoryStore? = null,
+    private val syncConfigStore: SyncConfigStore? = null,
     private val idGenerator: () -> String = { System.currentTimeMillis().toString() },
     private val colorGenerator: (taken: List<Long>) -> Long = ::nextPlayerColor,
     private val clock: () -> Long = { System.currentTimeMillis() },
+    private val backupClientFactory: (url: String, secret: String) -> BackupClient = { url, secret -> HttpBackupClient(url, secret) },
 ) : ViewModel() {
 
     private val _players = MutableStateFlow<List<Player>>(emptyList())
@@ -72,6 +81,16 @@ class RoundViewModel(
      */
     val isReady: StateFlow<Boolean> = _isReady.asStateFlow()
 
+    private val _syncConfig = MutableStateFlow<SyncConfig?>(null)
+
+    /** `null` means not configured — the Cloud screen's whole reason for existing (`CLOUD_SAVES.md` section 6 Phase D). */
+    val syncConfig: StateFlow<SyncConfig?> = _syncConfig.asStateFlow()
+
+    private val _syncStatus = MutableStateFlow<SyncStatus>(SyncStatus.Idle)
+
+    /** The result of the most recent [backUpNow]/[restore] — see [SyncStatus]'s own doc. */
+    val syncStatus: StateFlow<SyncStatus> = _syncStatus.asStateFlow()
+
     init {
         playerStore?.let { store ->
             viewModelScope.launch { _players.value = store.loadPlayers() }
@@ -87,6 +106,9 @@ class RoundViewModel(
                 _round.value = store.loadRound()
                 _isReady.value = true
             }
+        }
+        syncConfigStore?.let { store ->
+            viewModelScope.launch { _syncConfig.value = store.loadConfig() }
         }
     }
 
@@ -439,6 +461,96 @@ class RoundViewModel(
         historyStore?.let { store ->
             val snapshot = _history.value
             viewModelScope.launch { store.saveHistory(snapshot) }
+        }
+    }
+
+    // ---- Cloud saves (CLOUD_SAVES.md) ---------------------------------------------------------
+    //
+    // Both directions follow the same three-step shape: resolve [_syncConfig] (bailing out to
+    // [SyncStatus.Failure] with no [BackupClient] built at all if nothing is configured — the
+    // "not-configured" path `CLOUD_SAVES.md` section 6 Phase B calls out by name), build a fresh
+    // client via [backupClientFactory], then interpret whatever it returns. Neither method touches
+    // [RoundState] — cloud saves never syncs the active round (`CLOUD_SAVES.md` section 2 "Active
+    // round is not backed up").
+
+    /**
+     * Pushes the current players/courses/history to the configured sheet — Home's `BACK UP NOW`.
+     * Upsert only: nothing already in the sheet is ever removed by a push, only added or updated
+     * (`CLOUD_SAVES.md` section 2 "Push is upsert, never delete") — which is simply what *not*
+     * sending a delete instruction of any kind already guarantees, since the wire format
+     * (`CLOUD_SAVES.md` section 3) has no such instruction to send.
+     */
+    fun backUpNow() {
+        val config = _syncConfig.value
+        if (config == null) {
+            _syncStatus.value = SyncStatus.Failure(NOT_CONFIGURED_MESSAGE)
+            return
+        }
+        _syncStatus.value = SyncStatus.InProgress
+        viewModelScope.launch {
+            val client = backupClientFactory(config.url, config.secret)
+            val data = BackupData(players = _players.value, courses = _courses.value, rounds = _history.value)
+            when (val result = client.push(data)) {
+                is PushResult.Success -> {
+                    _syncStatus.value = SyncStatus.Success(formatPushSummary(result))
+                    recordSyncTime()
+                }
+                is PushResult.Failure -> _syncStatus.value = SyncStatus.Failure(result.message)
+            }
+        }
+    }
+
+    /**
+     * Pulls the sheet's current state and merges it into the watch's own via [mergeBackup] — Home's
+     * `RESTORE`, behind its own confirmation screen. Merge, never replace: an id present on both
+     * sides takes the sheet's version, an id only on the watch is left alone, an id only in the
+     * sheet is added (`CLOUD_SAVES.md` section 2 "Restore merges by id, sheet wins") — so a restore
+     * can only ever add to or correct what's on the watch, never silently discard something played
+     * since the last push.
+     */
+    fun restore() {
+        val config = _syncConfig.value
+        if (config == null) {
+            _syncStatus.value = SyncStatus.Failure(NOT_CONFIGURED_MESSAGE)
+            return
+        }
+        _syncStatus.value = SyncStatus.InProgress
+        viewModelScope.launch {
+            val client = backupClientFactory(config.url, config.secret)
+            when (val result = client.pull()) {
+                is PullResult.Success -> {
+                    val local = BackupData(players = _players.value, courses = _courses.value, rounds = _history.value)
+                    val merged = mergeBackup(local, result.data)
+                    _players.value = merged.players
+                    _courses.value = merged.courses
+                    _history.value = merged.rounds
+                    persistPlayers()
+                    persistCourses()
+                    persistHistory()
+                    _syncStatus.value = SyncStatus.Success(formatPullSummary(result))
+                    recordSyncTime()
+                }
+                is PullResult.Failure -> _syncStatus.value = SyncStatus.Failure(result.message)
+            }
+        }
+    }
+
+    /** Stamps [SyncConfig.lastSyncAt] after a push or pull that actually succeeded, and reloads [_syncConfig] so the Cloud screen's status line updates without waiting for a full re-launch. No-op with no [syncConfigStore] (every test that isn't exercising sync itself). */
+    private fun recordSyncTime() {
+        val store = syncConfigStore ?: return
+        val now = clock()
+        viewModelScope.launch {
+            store.recordSyncAt(now)
+            _syncConfig.value = store.loadConfig()
+        }
+    }
+
+    /** The Cloud screen's `CLEAR CONFIG` (`CLOUD_SAVES.md` section 6 Phase D) — the only UI-driven way to remove a configured endpoint; setting one is adb-only (see [SyncConfigReceiver]). */
+    fun clearSyncConfig() {
+        _syncConfig.value = null
+        _syncStatus.value = SyncStatus.Idle
+        syncConfigStore?.let { store ->
+            viewModelScope.launch { store.clearConfig() }
         }
     }
 }
