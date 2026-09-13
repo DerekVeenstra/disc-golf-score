@@ -87,7 +87,7 @@ made on purpose than for a corrupt byte you never saw.
 Mitigation, in the script rather than the app: the Apps Script validates on **push** (it has just
 been handed the authoritative version, so it can rewrite the readable columns cleanly every time)
 and the restore response includes a `warnings` array naming rows it couldn't parse. The watch shows
-`Restored 12 rounds · 2 rows skipped`. Not perfect, but it's the difference between a silent loss
+`Successfully synced · 2 rows skipped`. Not perfect, but it's the difference between a silent loss
 and a visible one.
 
 ---

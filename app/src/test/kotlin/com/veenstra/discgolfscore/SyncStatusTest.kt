@@ -37,31 +37,24 @@ class SyncStatusTest {
     }
 
     @Test
-    fun `a clean pull summary names the round count with no warnings suffix`() {
+    fun `a clean pull summary says synced with no counts and no warnings suffix`() {
         val data = BackupData(players = emptyList(), courses = emptyList(), rounds = List(12) { fakeRound(it) })
         val result = PullResult.Success(data, warnings = emptyList())
-        assertEquals("Restored 12 rounds", formatPullSummary(result))
+        assertEquals("Successfully synced", formatPullSummary(result))
     }
 
     @Test
-    fun `a pull summary with warnings matches CLOUD_SAVES section 2's own illustrative example`() {
+    fun `a pull summary with warnings appends the skipped-row count`() {
         val data = BackupData(players = emptyList(), courses = emptyList(), rounds = List(12) { fakeRound(it) })
         val result = PullResult.Success(data, warnings = listOf("row a", "row b"))
-        assertEquals("Restored 12 rounds · 2 rows skipped", formatPullSummary(result))
+        assertEquals("Successfully synced · 2 rows skipped", formatPullSummary(result))
     }
 
     @Test
-    fun `a pull summary of exactly one round says round, not rounds`() {
+    fun `a pull summary with exactly one warning says row, not rows`() {
         val data = BackupData(players = emptyList(), courses = emptyList(), rounds = listOf(fakeRound(0)))
-        val result = PullResult.Success(data, warnings = emptyList())
-        assertEquals("Restored 1 round", formatPullSummary(result))
-    }
-
-    @Test
-    fun `a pull summary of zero rounds stays plural`() {
-        val data = BackupData(players = emptyList(), courses = emptyList(), rounds = emptyList())
-        val result = PullResult.Success(data, warnings = emptyList())
-        assertEquals("Restored 0 rounds", formatPullSummary(result))
+        val result = PullResult.Success(data, warnings = listOf("row a"))
+        assertEquals("Successfully synced · 1 row skipped", formatPullSummary(result))
     }
 
     private fun fakeRound(index: Int) = SavedRound(

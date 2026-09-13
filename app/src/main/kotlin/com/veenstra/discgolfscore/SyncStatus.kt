@@ -25,10 +25,9 @@ internal fun formatPushSummary(result: PushResult.Success): String {
     return appendSkippedRows(base, result.warnings)
 }
 
-/** `"Restored 12 rounds"` (or `"Restored 1 round"`), with `"· 2 rows skipped"` appended the same way [formatPushSummary] does — `CLOUD_SAVES.md`'s own illustrative example for this exact message. The round count is the sheet's own [BackupData.rounds] size (what came down and was merged in), not the watch's resulting history size, which could differ from either input. */
+/** `"Successfully synced"`, with `"· 2 rows skipped"` appended the same way [formatPushSummary] does. Deliberately doesn't name counts the way [formatPushSummary] does: a restore merges players/courses/rounds together (`CLOUD_SAVES.md` section 2's merge-by-id rules), so any single count — rounds included — would describe only part of what changed and imply the rest didn't, which is worse than saying nothing. */
 internal fun formatPullSummary(result: PullResult.Success): String {
-    val base = "Restored ${countWord(result.data.rounds.size, "round")}"
-    return appendSkippedRows(base, result.warnings)
+    return appendSkippedRows("Successfully synced", result.warnings)
 }
 
 /** `"$count $noun"`, pluralized (`"$noun" + "s"`) unless [count] is exactly `1` — `0` stays plural ("0 rounds"), matching ordinary English. Every noun this app hands in ("player", "course", "round", "row", "layout") pluralizes with a plain trailing `s`, so there's no need for anything fancier. Package-visible so [courseListDetail] can reuse it for "N layouts" instead of duplicating the pluralization rule. */
