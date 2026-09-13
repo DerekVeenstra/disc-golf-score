@@ -16,9 +16,10 @@ import org.junit.Test
 /**
  * Exercises the layout record (PLAN.md section 2 "Layouts" — the record moved from [Course] onto
  * [Layout]): [RoundViewModel.finishRound]'s automatic write-back (via [recordAfterRound]) plus
- * [RoundViewModel.justSetRecord], and the manual corrections [LayoutEditorScreen] drives
- * ([RoundViewModel.setLayoutRecordHolders] / [RoundViewModel.setLayoutRecordToPar]) — all against
- * an in-memory fake, same approach as RoundViewModelRosterTest's par write-back tests.
+ * [RoundViewModel.justSetRecord] — against an in-memory fake, same approach as
+ * RoundViewModelRosterTest's par write-back tests. There's no manual-correction path any more
+ * (PLAN.md section 2 "Layout record editing removed") — a wrong record is fixed from the Google
+ * Sheet cloud saves write to instead.
  */
 @OptIn(ExperimentalCoroutinesApi::class)
 class RoundViewModelRecordTest {
@@ -171,124 +172,6 @@ class RoundViewModelRecordTest {
         assertFalse(vm.justSetRecord.value)
     }
 
-    // ---- Manual correction: holder names -----------------------------------------------------
-
-    @Test
-    fun `setLayoutRecordHolders sets holders and seeds an even-par default when there was none`() {
-        val courseStore = RecordFakeCourseStore()
-        val vm = RoundViewModel(courseStore = courseStore, idGenerator = idSequence())
-        val course = vm.addCourse("Riverside", 6)!!
-        val layout = vm.layoutOf(course)
-
-        vm.setLayoutRecordHolders(course.id, layout.id, "Derek")
-
-        val updated = vm.layoutOf(course)
-        assertEquals(listOf("Derek"), updated.recordHolderNames)
-        assertEquals(0, updated.recordToPar)
-    }
-
-    @Test
-    fun `setLayoutRecordHolders splits and sanitizes a comma-separated tie`() {
-        val courseStore = RecordFakeCourseStore()
-        val vm = RoundViewModel(courseStore = courseStore, idGenerator = idSequence())
-        val course = vm.addCourse("Riverside", 3)!!
-        val layout = vm.layoutOf(course)
-
-        vm.setLayoutRecordHolders(course.id, layout.id, "  Derek , Sam ,, Derek ")
-
-        assertEquals(listOf("Derek", "Sam"), vm.layoutOf(course).recordHolderNames)
-    }
-
-    @Test
-    fun `setLayoutRecordHolders preserves an existing to-par rather than reseeding it`() {
-        val layout = Layout("l1", "18 holes", 3, listOf(0, 0, 0), recordHolderNames = listOf("Sam"), recordToPar = -5)
-        val courseStore = RecordFakeCourseStore(initial = listOf(Course("c1", "Riverside", listOf(layout))))
-        val vm = RoundViewModel(courseStore = courseStore, idGenerator = idSequence())
-        val course = vm.courses.value.single()
-
-        vm.setLayoutRecordHolders(course.id, layout.id, "Derek")
-
-        val updated = vm.layoutOf(course)
-        assertEquals(listOf("Derek"), updated.recordHolderNames)
-        assertEquals(-5, updated.recordToPar) // untouched
-    }
-
-    @Test
-    fun `setLayoutRecordHolders with a blank result clears the record entirely`() {
-        val layout = Layout("l1", "18 holes", 3, listOf(0, 0, 0), recordHolderNames = listOf("Sam"), recordToPar = -5)
-        val courseStore = RecordFakeCourseStore(initial = listOf(Course("c1", "Riverside", listOf(layout))))
-        val vm = RoundViewModel(courseStore = courseStore, idGenerator = idSequence())
-        val course = vm.courses.value.single()
-
-        vm.setLayoutRecordHolders(course.id, layout.id, "   ")
-
-        val updated = vm.layoutOf(course)
-        assertTrue(updated.recordHolderNames.isEmpty())
-        assertNull(updated.recordToPar)
-    }
-
-    @Test
-    fun `setLayoutRecordHolders for an unknown course id is a no-op`() {
-        val courseStore = RecordFakeCourseStore()
-        val vm = RoundViewModel(courseStore = courseStore, idGenerator = idSequence())
-        val course = vm.addCourse("Riverside", 3)!!
-        val layout = vm.layoutOf(course)
-
-        vm.setLayoutRecordHolders("not-a-real-id", layout.id, "Derek")
-
-        assertEquals(course, vm.courses.value.single())
-    }
-
-    @Test
-    fun `setLayoutRecordHolders for an unknown layout id is a no-op`() {
-        val courseStore = RecordFakeCourseStore()
-        val vm = RoundViewModel(courseStore = courseStore, idGenerator = idSequence())
-        val course = vm.addCourse("Riverside", 3)!!
-
-        vm.setLayoutRecordHolders(course.id, "not-a-real-layout-id", "Derek")
-
-        assertEquals(course, vm.courses.value.single())
-    }
-
-    // ---- Manual correction: to-par -----------------------------------------------------------
-
-    @Test
-    fun `setLayoutRecordToPar adjusts the to-par once holders exist`() {
-        val layout = Layout("l1", "18 holes", 3, listOf(0, 0, 0), recordHolderNames = listOf("Derek"), recordToPar = -5)
-        val courseStore = RecordFakeCourseStore(initial = listOf(Course("c1", "Riverside", listOf(layout))))
-        val vm = RoundViewModel(courseStore = courseStore, idGenerator = idSequence())
-        val course = vm.courses.value.single()
-
-        vm.setLayoutRecordToPar(course.id, layout.id, -8) // within 3 holes * (1-5)..(15-3) = -12..36
-
-        assertEquals(-8, vm.layoutOf(course).recordToPar)
-    }
-
-    @Test
-    fun `setLayoutRecordToPar clamps to the whole-round to-par range`() {
-        val layout = Layout("l1", "18 holes", 3, listOf(0, 0, 0), recordHolderNames = listOf("Derek"), recordToPar = -5)
-        val courseStore = RecordFakeCourseStore(initial = listOf(Course("c1", "Riverside", listOf(layout))))
-        val vm = RoundViewModel(courseStore = courseStore, idGenerator = idSequence())
-        val course = vm.courses.value.single()
-
-        vm.setLayoutRecordToPar(course.id, layout.id, -999) // below 3 holes * (MIN_STROKES(1) - MAX_PAR(5)) = -12
-        assertEquals(-12, vm.layoutOf(course).recordToPar)
-
-        vm.setLayoutRecordToPar(course.id, layout.id, 999) // above 3 holes * (MAX_STROKES(15) - MIN_PAR(3)) = 36
-        assertEquals(36, vm.layoutOf(course).recordToPar)
-    }
-
-    @Test
-    fun `setLayoutRecordToPar is a no-op when the layout has no holders yet`() {
-        val courseStore = RecordFakeCourseStore()
-        val vm = RoundViewModel(courseStore = courseStore, idGenerator = idSequence())
-        val course = vm.addCourse("Riverside", 3)!!
-        val layout = vm.layoutOf(course)
-
-        vm.setLayoutRecordToPar(course.id, layout.id, -5)
-
-        assertNull(vm.layoutOf(course).recordToPar)
-    }
 }
 
 private class RecordFakeCourseStore(initial: List<Course> = emptyList()) : CourseStore {

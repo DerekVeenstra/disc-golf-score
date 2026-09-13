@@ -20,14 +20,15 @@ private sealed interface CourseEditorMode {
 /**
  * A course's own editor (PLAN.md section 2 "Layouts", section 3 "Course editor"): rename the
  * course, then the list of its [Course.layouts] — add one, and tap/long-press one to reach
- * [LayoutEditorScreen], where its pars and record actually live now. Reused unchanged from two
- * entry points — long-pressing a course on the new-round setup screen, and tapping/long-pressing
- * one on the courses manager — rather than being duplicated, the same call PLAN.md section 3 made
- * before layouts existed.
+ * [LayoutEditorScreen], where its pars actually live now (its record is display-only there —
+ * PLAN.md section 2 "Layout record editing removed"). Reused unchanged from two entry points —
+ * long-pressing a course on the new-round setup screen, and tapping/long-pressing one on the
+ * courses manager — rather than being duplicated, the same call PLAN.md section 3 made before
+ * layouts existed.
  *
  * Owns every text-input launcher this screen and [LayoutEditorScreen] need internally (rename,
- * "+ New layout…"'s name step, [LayoutEditorScreen]'s own rename/record launchers) rather than
- * leaving them to its two call sites — the same "fold it into the screen that needs it" call
+ * "+ New layout…"'s name step, [LayoutEditorScreen]'s own rename launcher) rather than leaving
+ * them to its two call sites — the same "fold it into the screen that needs it" call
  * [LayoutEditorScreen]'s own doc comment explains, now doubly worth it since this screen has two
  * call sites instead of one.
  */
@@ -39,8 +40,6 @@ fun CourseEditorScreen(
     onRenameLayout: (courseId: String, layoutId: String, name: String) -> Unit,
     onDeleteLayout: (courseId: String, layoutId: String) -> Unit,
     onSetLayoutPar: (courseId: String, layoutId: String, holeIndex: Int, newPar: Int) -> Unit,
-    onSetLayoutRecordHolders: (courseId: String, layoutId: String, rawNames: String) -> Unit,
-    onSetLayoutRecordToPar: (courseId: String, layoutId: String, toPar: Int) -> Unit,
     onDeleteCourse: (id: String) -> Unit,
     onDone: () -> Unit,
 ) {
@@ -110,8 +109,6 @@ fun CourseEditorScreen(
                 LayoutEditorScreen(
                     layout = liveLayout,
                     onRename = { name -> onRenameLayout(course.id, liveLayout.id, name) },
-                    onSetRecordHolders = { rawNames -> onSetLayoutRecordHolders(course.id, liveLayout.id, rawNames) },
-                    onSetRecordToPar = { toPar -> onSetLayoutRecordToPar(course.id, liveLayout.id, toPar) },
                     onSetPar = { holeIndex, newPar -> onSetLayoutPar(course.id, liveLayout.id, holeIndex, newPar) },
                     onDelete = {
                         onDeleteLayout(course.id, liveLayout.id)

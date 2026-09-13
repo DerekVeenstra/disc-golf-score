@@ -37,8 +37,6 @@ fun ManageCoursesScreen(
     onRenameLayout: (courseId: String, layoutId: String, name: String) -> Unit,
     onDeleteLayout: (courseId: String, layoutId: String) -> Unit,
     onSetLayoutPar: (courseId: String, layoutId: String, holeIndex: Int, newPar: Int) -> Unit,
-    onSetLayoutRecordHolders: (courseId: String, layoutId: String, rawNames: String) -> Unit,
-    onSetLayoutRecordToPar: (courseId: String, layoutId: String, toPar: Int) -> Unit,
     onDeleteCourse: (id: String) -> Unit,
     onDone: () -> Unit,
 ) {
@@ -97,8 +95,6 @@ fun ManageCoursesScreen(
                     onRenameLayout = onRenameLayout,
                     onDeleteLayout = onDeleteLayout,
                     onSetLayoutPar = onSetLayoutPar,
-                    onSetLayoutRecordHolders = onSetLayoutRecordHolders,
-                    onSetLayoutRecordToPar = onSetLayoutRecordToPar,
                     onDeleteCourse = {
                         onDeleteCourse(live.id)
                         mode = ManageCoursesMode.Listing

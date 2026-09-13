@@ -17,15 +17,15 @@ import androidx.wear.compose.material3.Text
 /**
  * The only place a wrong learned par gets fixed (PLAN.md section 2, section 3 "Course editor"),
  * now scoped to one [Layout] rather than a whole course (PLAN.md section 2 "Layouts" — sibling
- * layouts of the same course learn independently): rename, the record row, then a scrolling
- * hole-by-hole par list. Hole count is shown but not editable (PLAN.md section 2 "Course editing",
- * carried onto [Layout] — "Hole count is immutable after creation"). Reached from
+ * layouts of the same course learn independently): rename, the (display-only) record row, then a
+ * scrolling hole-by-hole par list. Hole count is shown but not editable (PLAN.md section 2 "Course
+ * editing", carried onto [Layout] — "Hole count is immutable after creation"). Reached from
  * [CourseEditorScreen] by tapping or long-pressing a layout row.
  *
- * Owns its own rename/record text-input launchers internally (unlike the old course editor, which
- * left those to its caller) — this screen and [CourseEditorScreen] are reached through two call
- * sites each (the new-round setup screen and the courses manager), and folding every launcher this
- * screen needs into itself, rather than duplicating them at both call sites, is what keeps that
+ * Owns its own rename text-input launcher internally (unlike the old course editor, which left
+ * that to its caller) — this screen and [CourseEditorScreen] are reached through two call sites
+ * each (the new-round setup screen and the courses manager), and folding every launcher this
+ * screen needs into itself, rather than duplicating it at both call sites, is what keeps that
  * plumbing from doubling as the model grew a second level of editable entity.
  *
  * An unlearned hole (`0` in [Layout.pars]) displays [DEFAULT_PAR]; nudging it with `−`/`＋` writes
@@ -33,11 +33,8 @@ import androidx.wear.compose.material3.Text
  * (PLAN.md section 3) means in practice — there's nothing to batch, so `SAVE` is really just
  * "done," matching every other roster edit in this app already being applied live.
  *
- * The record row (PLAN.md section 2 "Course record") mirrors the name row right above it: tapping
- * it opens the same text-input launcher [onRename] uses, prefilled with [Layout.recordHolderNames].
- * Once a record has holders, a `To par` stepper appears under it for [onSetRecordToPar] to nudge,
- * the same `−`/`＋` shape as every par row below it — there's no stepper before then because
- * there's nothing yet for it to adjust.
+ * The record row is display-only (PLAN.md section 2 "Layout record editing removed") — correcting
+ * it by hand now happens from the Google Sheet cloud saves write to, not from the watch.
  *
  * [canDelete] is `false` when [layout] is its course's only layout — PLAN.md section 2 "Deleting a
  * layout": deleting the last one is blocked rather than allowed, so the row is hidden entirely
@@ -48,8 +45,6 @@ import androidx.wear.compose.material3.Text
 fun LayoutEditorScreen(
     layout: Layout,
     onRename: (name: String) -> Unit,
-    onSetRecordHolders: (rawNames: String) -> Unit,
-    onSetRecordToPar: (Int) -> Unit,
     onSetPar: (holeIndex: Int, newPar: Int) -> Unit,
     onDelete: () -> Unit,
     canDelete: Boolean,
@@ -60,12 +55,6 @@ fun LayoutEditorScreen(
     val renameLauncher = rememberTextInputLauncher(label = "Layout name") { typed ->
         val trimmed = typed?.trim()
         if (!trimmed.isNullOrEmpty()) onRename(trimmed)
-    }
-    // Unlike a rename, a blank result here is meaningful (it clears the record) rather than
-    // ignored — see RoundViewModel.setLayoutRecordHolders — so every non-cancelled result is
-    // passed through.
-    val recordHoldersLauncher = rememberTextInputLauncher(label = "Record holder(s)") { typed ->
-        if (typed != null) onSetRecordHolders(typed)
     }
 
     ScreenScaffold(scrollState = listState) { contentPadding ->
@@ -83,26 +72,13 @@ fun LayoutEditorScreen(
                 )
             }
             item {
-                PickableRow(
-                    label = "Record: ${formatLayoutRecord(layout)}",
-                    selected = false,
-                    onClick = { recordHoldersLauncher(layout.recordHolderNames.joinToString(", ")) },
+                Text(
+                    text = "Record: ${formatLayoutRecord(layout)}",
+                    fontSize = 14.sp,
+                    textAlign = TextAlign.Center,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 6.dp),
                 )
-            }
-            if (layout.recordHolderNames.isNotEmpty()) {
-                item {
-                    val toPar = requireNotNull(layout.recordToPar) // holders and a to-par are set together
-                    val min = layout.holeCount * (MIN_STROKES - MAX_PAR)
-                    val max = layout.holeCount * (MAX_STROKES - MIN_PAR)
-                    StepperRow(
-                        label = "To par",
-                        value = formatToPar(toPar),
-                        decrementEnabled = toPar > min,
-                        incrementEnabled = toPar < max,
-                        onDecrement = { onSetRecordToPar((toPar - 1).coerceAtLeast(min)) },
-                        onIncrement = { onSetRecordToPar((toPar + 1).coerceAtMost(max)) },
-                    )
-                }
             }
             item {
                 Text(

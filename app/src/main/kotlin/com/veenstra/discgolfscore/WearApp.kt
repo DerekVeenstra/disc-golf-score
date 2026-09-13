@@ -114,8 +114,6 @@ fun WearApp(viewModel: RoundViewModel = rememberRoundViewModel()) {
                 onRenameLayout = viewModel::renameLayout,
                 onDeleteLayout = viewModel::deleteLayout,
                 onSetLayoutPar = viewModel::setLayoutPar,
-                onSetLayoutRecordHolders = viewModel::setLayoutRecordHolders,
-                onSetLayoutRecordToPar = viewModel::setLayoutRecordToPar,
                 onDeleteCourse = viewModel::deleteCourse,
                 onAddPlayer = viewModel::addPlayer,
                 onRenamePlayer = viewModel::renamePlayer,
@@ -174,8 +172,6 @@ fun WearApp(viewModel: RoundViewModel = rememberRoundViewModel()) {
                 onRenameLayout = viewModel::renameLayout,
                 onDeleteLayout = viewModel::deleteLayout,
                 onSetLayoutPar = viewModel::setLayoutPar,
-                onSetLayoutRecordHolders = viewModel::setLayoutRecordHolders,
-                onSetLayoutRecordToPar = viewModel::setLayoutRecordToPar,
                 onDeleteCourse = viewModel::deleteCourse,
                 onDone = { screen = AppScreen.Home },
             )
