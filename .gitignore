@@ -9,3 +9,6 @@
 .cxx
 local.properties
 app/build/
+
+# Cloud-saves shared secret (CLOUD_SAVES.md section 2 "Auth"). Machine-local, never committed.
+cloud-saves.secret
