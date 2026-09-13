@@ -2,12 +2,9 @@ package com.veenstra.discgolfscore
 
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
-import androidx.compose.ui.Modifier
 import androidx.wear.compose.foundation.lazy.TransformingLazyColumn
 import androidx.wear.compose.foundation.lazy.rememberTransformingLazyColumnState
-import androidx.wear.compose.material3.EdgeButton
 import androidx.wear.compose.material3.ScreenScaffold
-import androidx.wear.compose.material3.Text
 
 /**
  * Reached by long-pressing a saved player, on either the new-round setup screen or the players
@@ -27,7 +24,7 @@ fun PlayerEditorScreen(
     ScreenScaffold(scrollState = listState) { contentPadding ->
         TransformingLazyColumn(
             state = listState,
-            contentPadding = contentPadding.withRoundEdgeInset().withEdgeButtonReserve(),
+            contentPadding = contentPadding.withRoundEdgeInset(),
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
             item {
@@ -36,9 +33,9 @@ fun PlayerEditorScreen(
             item {
                 PickableRow(label = "Delete player", selected = false, onClick = onDelete)
             }
-        }
-        EdgeButton(onClick = onDone, modifier = Modifier.align(Alignment.BottomCenter)) {
-            Text(text = "DONE")
+            item {
+                PrimaryActionRow(label = "DONE", onClick = onDone)
+            }
         }
     }
 }

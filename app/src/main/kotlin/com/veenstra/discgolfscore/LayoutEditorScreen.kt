@@ -11,7 +11,6 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.wear.compose.foundation.lazy.TransformingLazyColumn
 import androidx.wear.compose.foundation.lazy.rememberTransformingLazyColumnState
-import androidx.wear.compose.material3.EdgeButton
 import androidx.wear.compose.material3.ScreenScaffold
 import androidx.wear.compose.material3.Text
 
@@ -72,7 +71,7 @@ fun LayoutEditorScreen(
     ScreenScaffold(scrollState = listState) { contentPadding ->
         TransformingLazyColumn(
             state = listState,
-            contentPadding = contentPadding.withRoundEdgeInset().withEdgeButtonReserve(),
+            contentPadding = contentPadding.withRoundEdgeInset(),
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
             item {
@@ -126,9 +125,9 @@ fun LayoutEditorScreen(
                     PickableRow(label = "Delete layout", selected = false, onClick = onDelete)
                 }
             }
-        }
-        EdgeButton(onClick = onDone, modifier = Modifier.align(Alignment.BottomCenter)) {
-            Text(text = "SAVE")
+            item {
+                PrimaryActionRow(label = "SAVE", onClick = onDone)
+            }
         }
     }
 }

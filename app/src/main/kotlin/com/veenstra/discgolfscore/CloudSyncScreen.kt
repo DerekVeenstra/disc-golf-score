@@ -15,7 +15,6 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.wear.compose.foundation.lazy.TransformingLazyColumn
 import androidx.wear.compose.foundation.lazy.rememberTransformingLazyColumnState
-import androidx.wear.compose.material3.EdgeButton
 import androidx.wear.compose.material3.MaterialTheme
 import androidx.wear.compose.material3.ScreenScaffold
 import androidx.wear.compose.material3.Text
@@ -77,7 +76,7 @@ fun CloudSyncScreen(
             ScreenScaffold(scrollState = listState) { contentPadding ->
                 TransformingLazyColumn(
                     state = listState,
-                    contentPadding = contentPadding.withRoundEdgeInset().withEdgeButtonReserve(),
+                    contentPadding = contentPadding.withRoundEdgeInset(),
                     horizontalAlignment = Alignment.CenterHorizontally,
                 ) {
                     item {
@@ -131,9 +130,9 @@ fun CloudSyncScreen(
                     item {
                         PickableRow(label = "CLEAR CONFIG", selected = false, leading = "🗑️", onClick = onClearConfig)
                     }
-                }
-                EdgeButton(onClick = onDone, modifier = Modifier.align(Alignment.BottomCenter)) {
-                    Text(text = "DONE")
+                    item {
+                        PrimaryActionRow(label = "DONE", onClick = onDone)
+                    }
                 }
             }
         }

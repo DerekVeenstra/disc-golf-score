@@ -16,7 +16,6 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.wear.compose.foundation.lazy.TransformingLazyColumn
 import androidx.wear.compose.foundation.lazy.rememberTransformingLazyColumnState
-import androidx.wear.compose.material3.EdgeButton
 import androidx.wear.compose.material3.MaterialTheme
 import androidx.wear.compose.material3.ScreenScaffold
 import androidx.wear.compose.material3.Text
@@ -46,7 +45,7 @@ fun PastRoundsScreen(
             ScreenScaffold(scrollState = listState) { contentPadding ->
                 TransformingLazyColumn(
                     state = listState,
-                    contentPadding = contentPadding.withRoundEdgeInset().withEdgeButtonReserve(),
+                    contentPadding = contentPadding.withRoundEdgeInset(),
                     horizontalAlignment = Alignment.CenterHorizontally,
                 ) {
                     item {
@@ -78,9 +77,9 @@ fun PastRoundsScreen(
                             onClick = { mode = PastRoundsMode.Viewing(saved.id) },
                         )
                     }
-                }
-                EdgeButton(onClick = onDone, modifier = Modifier.align(Alignment.BottomCenter)) {
-                    Text(text = "DONE")
+                    item {
+                        PrimaryActionRow(label = "DONE", onClick = onDone)
+                    }
                 }
             }
         }

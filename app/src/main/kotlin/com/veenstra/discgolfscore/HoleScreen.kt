@@ -236,34 +236,6 @@ private fun CompactHoleParHeader(currentHole: Int, holeCount: Int, par: Int, onC
 }
 
 /**
- * The primary next/finish action — a filled, accent-colored pill sitting in the list right after
- * the standings, in place of the `EdgeButton` this screen used to dock at the bottom of every
- * hole regardless of scroll position (see [HoleScreen]'s doc comment).
- */
-@Composable
-private fun PrimaryActionRow(label: String, onClick: () -> Unit) {
-    Box(
-        // Vertical padding first (outermost) so it's margin around the 48dp pill below, not
-        // padding eating into the pill's own height and shrinking its tap target under 48dp.
-        modifier = Modifier
-            .padding(top = 6.dp, bottom = 2.dp)
-            .roundSafeWidth()
-            .height(48.dp)
-            .clip(RoundedCornerShape(24.dp))
-            .background(MaterialTheme.colorScheme.primary)
-            .clickable(onClick = onClick),
-        contentAlignment = Alignment.Center,
-    ) {
-        Text(
-            text = label,
-            fontSize = 14.sp,
-            fontWeight = FontWeight.Bold,
-            color = MaterialTheme.colorScheme.onPrimary,
-        )
-    }
-}
-
-/**
  * The expanded par control (PLAN.md section 3: `3 [4] 5`) — restored to Derek's originally
  * specified three-visible-options shape (Task A), replacing Phase 5's `StepperRow`-based redesign.
  * Phase 5 dropped this because three 48dp circles plus visible gaps need more width than the

@@ -7,12 +7,9 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
-import androidx.compose.ui.Modifier
 import androidx.wear.compose.foundation.lazy.TransformingLazyColumn
 import androidx.wear.compose.foundation.lazy.rememberTransformingLazyColumnState
-import androidx.wear.compose.material3.EdgeButton
 import androidx.wear.compose.material3.ScreenScaffold
-import androidx.wear.compose.material3.Text
 
 private sealed interface ManagePlayersMode {
     data object Listing : ManagePlayersMode
@@ -50,7 +47,7 @@ fun ManagePlayersScreen(
             ScreenScaffold(scrollState = listState) { contentPadding ->
                 TransformingLazyColumn(
                     state = listState,
-                    contentPadding = contentPadding.withRoundEdgeInset().withEdgeButtonReserve(),
+                    contentPadding = contentPadding.withRoundEdgeInset(),
                     horizontalAlignment = Alignment.CenterHorizontally,
                 ) {
                     items(players.size) { index ->
@@ -66,9 +63,9 @@ fun ManagePlayersScreen(
                     item {
                         PickableRow(label = "+ New player…", selected = false, onClick = { newPlayerLauncher(null) })
                     }
-                }
-                EdgeButton(onClick = onDone, modifier = Modifier.align(Alignment.BottomCenter)) {
-                    Text(text = "DONE")
+                    item {
+                        PrimaryActionRow(label = "DONE", onClick = onDone)
+                    }
                 }
             }
         }
