@@ -16,6 +16,11 @@ lifecycleRuntimeKtx = "2.11.0"
 junit = "4.13.2"
 kotlinxCoroutinesCore = "1.11.0"
 kotlinxCoroutinesTest = "1.11.0"
+# Test-only: android.jar's org.json classes are stubs in a plain JVM unit test (every method
+# throws `RuntimeException("Stub!")`). This is the same implementation Android ships at runtime,
+# so production code never depends on it directly — see CloudBackup.kt's class doc and
+# CLOUD_SAVES.md section 5 item 4.
+orgJson = "20240303"
 
 [libraries]
 androidx-activity-compose = { group = "androidx.activity", name = "activity-compose", version.ref = "activityCompose" }
@@ -35,6 +40,7 @@ androidx-datastore-preferences = { group = "androidx.datastore", name = "datasto
 junit = { group = "junit", name = "junit", version.ref = "junit" }
 kotlinx-coroutines-core = { group = "org.jetbrains.kotlinx", name = "kotlinx-coroutines-core", version.ref = "kotlinxCoroutinesCore" }
 kotlinx-coroutines-test = { group = "org.jetbrains.kotlinx", name = "kotlinx-coroutines-test", version.ref = "kotlinxCoroutinesTest" }
+org-json = { group = "org.json", name = "json", version.ref = "orgJson" }
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }

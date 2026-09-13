@@ -61,4 +61,8 @@ dependencies {
 
     testImplementation(libs.junit)
     testImplementation(libs.kotlinx.coroutines.test)
+    // Real org.json, not android.jar's stub — see CloudBackup.kt's class doc and
+    // CLOUD_SAVES.md section 5 item 4. Production code uses the framework's built-in org.json;
+    // this is test-only on purpose.
+    testImplementation(libs.org.json)
 }
