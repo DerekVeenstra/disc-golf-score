@@ -8,7 +8,6 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
 import androidx.wear.compose.foundation.lazy.TransformingLazyColumn
 import androidx.wear.compose.foundation.lazy.rememberTransformingLazyColumnState
 import androidx.wear.compose.material3.EdgeButton
@@ -59,7 +58,7 @@ fun ManagePlayersScreen(
                         PickableRow(
                             label = player.name,
                             selected = false,
-                            tint = Color(player.color),
+                            tint = player.rowTint(),
                             onClick = { mode = ManagePlayersMode.Editing(player.id) },
                             onLongClick = { mode = ManagePlayersMode.Editing(player.id) },
                         )

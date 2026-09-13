@@ -19,10 +19,9 @@ import kotlinx.coroutines.launch
  *   wall-clock millisecond it was created (same call ultimate-score's preset id generator made —
  *   good enough for something a person creates by hand at most a few dozen times), but is a
  *   parameter so tests can supply a deterministic sequence instead.
- * @param colorGenerator generates each new [Player]'s [Player.color]. Defaults to
- *   [randomPlayerColor], same "parameter so tests can supply something deterministic" reason as
- *   [idGenerator] — a real random color would make an equality assertion on the created [Player]
- *   flaky.
+ * @param colorGenerator picks each new [Player]'s [Player.color], given the colors of the players
+ *   already in the roster. Defaults to [nextPlayerColor] (the least-used palette color); a
+ *   parameter so tests can supply a fixed color instead.
  * @param clock the current time in epoch milliseconds, stamped onto a round as it's saved to
  *   history. A parameter for the same reason as [idGenerator].
  */
@@ -32,7 +31,7 @@ class RoundViewModel(
     private val roundStore: RoundStore? = null,
     private val historyStore: RoundHistoryStore? = null,
     private val idGenerator: () -> String = { System.currentTimeMillis().toString() },
-    private val colorGenerator: () -> Long = { randomPlayerColor() },
+    private val colorGenerator: (taken: List<Long>) -> Long = ::nextPlayerColor,
     private val clock: () -> Long = { System.currentTimeMillis() },
 ) : ViewModel() {
 
@@ -51,6 +50,17 @@ class RoundViewModel(
 
     /** Every finished round, newest first. */
     val history: StateFlow<List<SavedRound>> = _history.asStateFlow()
+
+    private val _justSetRecord = MutableStateFlow(false)
+
+    /**
+     * True from the moment [finishRound] advances the round's course record, until the next
+     * [startRound] or [done]. [WearApp] reads this only on the live finish path (not when
+     * re-opening a round from [PastRoundsScreen]) to show [FinalScoreboardScreen]'s fanfare exactly
+     * once, right when it happens — deliberately in-memory only, not persisted, since losing it to
+     * a force-stop right after finishing costs nothing but the celebration.
+     */
+    val justSetRecord: StateFlow<Boolean> = _justSetRecord.asStateFlow()
 
     private val _isReady = MutableStateFlow(roundStore == null)
 
@@ -82,11 +92,11 @@ class RoundViewModel(
 
     // ---- Roster: players --------------------------------------------------------------------
 
-    /** Sanitizes [name] (PLAN.md section 4 "sanitizeName"); returns `null` and does nothing on a blank result rather than saving an unlabeled row. Gets a fresh random [Player.color] from [colorGenerator]. */
+    /** Sanitizes [name] (PLAN.md section 4 "sanitizeName"); returns `null` and does nothing on a blank result rather than saving an unlabeled row. Its [Player.color] comes from [colorGenerator], given the current roster's colors. */
     fun addPlayer(name: String): Player? {
         val sanitized = sanitizeName(name)
         if (sanitized.isEmpty()) return null
-        val player = Player(id = idGenerator(), name = sanitized, color = colorGenerator())
+        val player = Player(id = idGenerator(), name = sanitized, color = colorGenerator(_players.value.map { it.color }))
         _players.update { it + player }
         persistPlayers()
         return player
@@ -168,11 +178,67 @@ class RoundViewModel(
         }
     }
 
+    /**
+     * Manually corrects this course's record holder name(s) — [CourseEditorScreen]'s free-text
+     * entry, comma-separated for a tie — the same manual-correction role [setCoursePar] plays for
+     * a wrong *learned* par (PLAN.md section 2 "Course record"). Each name is sanitized the same
+     * as a player/course name; blanks and duplicates are dropped. An empty result **clears** the
+     * record entirely (both holders and to-par) rather than leaving a nameless score behind —
+     * typed text that isn't blank is validated by the caller before this is invoked, so an empty
+     * result here specifically means the person cleared the field.
+     *
+     * A newly-set holder list that had no prior to-par seeds one at even par (`0`) — the same
+     * "reasonable starting guess, then nudge it" convention as an unlearned hole's par — for
+     * [setCourseRecordToPar] to adjust from. No-op if [id] isn't a saved course.
+     */
+    fun setCourseRecordHolders(id: String, rawNames: String) {
+        val names = rawNames.split(",").map(::sanitizeName).filter { it.isNotEmpty() }.distinct()
+        _courses.update { list ->
+            list.map { course ->
+                if (course.id != id) {
+                    course
+                } else if (names.isEmpty()) {
+                    course.copy(recordHolderNames = emptyList(), recordToPar = null)
+                } else {
+                    course.copy(
+                        recordHolderNames = names,
+                        recordToPar = course.recordToPar ?: 0,
+                    )
+                }
+            }
+        }
+        persistCourses()
+    }
+
+    /**
+     * Manually corrects this course's record to-par, clamped to a plausible whole-round range —
+     * each hole can swing from [MIN_STROKES] on a [MAX_PAR] hole to [MAX_STROKES] on a [MIN_PAR]
+     * one, so `holeCount * (`[MIN_STROKES]` - `[MAX_PAR]`)..holeCount * (`[MAX_STROKES]` - `[MIN_PAR]`)`
+     * scales that per-hole swing up to a full card, the same way [setCoursePar]'s stroke clamp
+     * scales up. No-op if [id] isn't a saved course, or if it has no record holders yet — there's
+     * nothing sensible to attach a score to (set the holders first, via [setCourseRecordHolders]).
+     */
+    fun setCourseRecordToPar(id: String, toPar: Int) {
+        _courses.update { list ->
+            list.map { course ->
+                if (course.id == id && course.recordHolderNames.isNotEmpty()) {
+                    val min = course.holeCount * (MIN_STROKES - MAX_PAR)
+                    val max = course.holeCount * (MAX_STROKES - MIN_PAR)
+                    course.copy(recordToPar = toPar.coerceIn(min, max))
+                } else {
+                    course
+                }
+            }
+        }
+        persistCourses()
+    }
+
     // ---- The active round ---------------------------------------------------------------------
 
     /** Starts a fresh round on [course] with [players] — see [newRound]. Persists immediately, same as every other round mutation. */
     fun startRound(course: Course, players: List<Player>) {
         _round.value = newRound(course, players)
+        _justSetRecord.value = false
         persistRoundAndWriteBack()
     }
 
@@ -183,15 +249,18 @@ class RoundViewModel(
 
     /**
      * Both confirmed-finish paths (PLAN.md section 3) end up here after the UI's own confirmation.
-     * The round is saved to [history] at the moment it *becomes* finished — only on that transition,
-     * so calling this again on an already-finished round (including one restored from disk) can't
-     * save it a second time.
+     * The round is saved to [history], and the course record write-back applied, at the moment it
+     * *becomes* finished — only on that transition, so calling this again on an already-finished
+     * round (including one restored from disk) can't save it, or advance the record, a second time.
      */
     fun finishRound() {
         val wasFinished = _round.value?.finished ?: return
         dispatch(RoundAction.Finish)
         val round = _round.value ?: return
-        if (!wasFinished && round.finished) saveToHistory(round)
+        if (!wasFinished && round.finished) {
+            saveToHistory(round)
+            _justSetRecord.value = applyRecordWriteBack(round)
+        }
     }
 
     /** No-op if there is no active round — every [RoundAction] needs one to apply to. */
@@ -238,6 +307,21 @@ class RoundViewModel(
     }
 
     /**
+     * The automatic half of "Course record" (PLAN.md section 2): applies [recordAfterRound] for
+     * [round]'s course, if any, and returns whether it actually changed anything — [finishRound]
+     * uses that to drive [justSetRecord]. No-ops (and returns `false`) if [RoundState.courseId] no
+     * longer names a course in [courses], same as [applyParWriteBack].
+     */
+    private fun applyRecordWriteBack(round: RoundState): Boolean {
+        val courseId = round.courseId ?: return false
+        val course = _courses.value.find { it.id == courseId } ?: return false
+        val updated = recordAfterRound(course, round) ?: return false
+        _courses.value = _courses.value.map { if (it.id == courseId) updated else it }
+        persistCourses()
+        return true
+    }
+
+    /**
      * Clears the round from storage — the only thing that can (PLAN.md section 2 "Finished round
      * persistence"). Deliberately not a [RoundAction]: it's a repository/ViewModel concern per
      * PLAN.md section 4 "A finished round is frozen... What clears it is DONE". Only the *active*
@@ -245,6 +329,7 @@ class RoundViewModel(
      */
     fun done() {
         _round.value = null
+        _justSetRecord.value = false
         roundStore?.let { store ->
             viewModelScope.launch { store.clearRound() }
         }

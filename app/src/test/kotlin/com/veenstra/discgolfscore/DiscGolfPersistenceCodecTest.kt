@@ -61,7 +61,7 @@ class DiscGolfPersistenceCodecTest {
         val raw = listOf(
             "NoId", // blank id
             "1", // blank name
-            "onlyonefield", // wrong field count
+            "onlyonefield", // wrong field count (< 5)
             "${valid.id}${valid.name}",
         ).joinToString("")
         assertEquals(listOf(valid), decodePlayers(raw))
@@ -110,6 +110,38 @@ class DiscGolfPersistenceCodecTest {
     }
 
     @Test
+    fun `a course with a single record holder survives an encode-decode round trip`() {
+        val course = Course("1", "Riverside", 3, listOf(3, 4, 5), recordHolderNames = listOf("Derek"), recordToPar = -5)
+        assertEquals(listOf(course), decodeCourses(encodeCourses(listOf(course))))
+    }
+
+    @Test
+    fun `a course with a tied record survives an encode-decode round trip, holder order intact`() {
+        val course = Course("1", "Riverside", 3, listOf(3, 4, 5), recordHolderNames = listOf("Derek", "Sam", "Alex"), recordToPar = -2)
+        assertEquals(listOf(course), decodeCourses(encodeCourses(listOf(course))))
+    }
+
+    @Test
+    fun `a course with no record round trips with empty holders and a null to-par`() {
+        val course = Course("1", "Riverside", 3, listOf(3, 4, 5))
+        val decoded = decodeCourses(encodeCourses(listOf(course))).single()
+        assertEquals(emptyList<String>(), decoded.recordHolderNames)
+        assertNull(decoded.recordToPar)
+    }
+
+    @Test
+    fun `a record holder name containing a comma round trips exactly, since names aren't comma-joined`() {
+        val course = Course("1", "Riverside", 1, listOf(3), recordHolderNames = listOf("Derek, Jr."), recordToPar = -5)
+        assertEquals(listOf(course), decodeCourses(encodeCourses(listOf(course))))
+    }
+
+    @Test
+    fun `a record of exactly even par (0) round trips, not confused with no record`() {
+        val course = Course("1", "Riverside", 3, listOf(3, 4, 5), recordHolderNames = listOf("Derek"), recordToPar = 0)
+        assertEquals(listOf(course), decodeCourses(encodeCourses(listOf(course))))
+    }
+
+    @Test
     fun `malformed course records are dropped rather than crashing the app`() {
         val valid = Course("2", "Sockeye Park", 2, listOf(3, 4))
         val raw = listOf(
@@ -119,8 +151,18 @@ class DiscGolfPersistenceCodecTest {
             "1Name0", // non-positive hole count
             "1Name33,4", // par list length disagrees with hole count
             "1Name33,x,5", // non-numeric par
-            "onlyonefield", // wrong field count
-            "${valid.id}${valid.name}${valid.holeCount}${valid.pars.joinToString(",")}",
+            "onlyonefield", // wrong field count (< 5)
+            encodeCourses(listOf(valid)),
+        ).joinToString("")
+        assertEquals(listOf(valid), decodeCourses(raw))
+    }
+
+    @Test
+    fun `a course record with a non-numeric recordToPar is dropped`() {
+        val valid = Course("2", "Sockeye Park", 2, listOf(3, 4))
+        val raw = listOf(
+            "1Name33,4notanumber", // non-numeric recordToPar
+            encodeCourses(listOf(valid)),
         ).joinToString("")
         assertEquals(listOf(valid), decodeCourses(raw))
     }
@@ -289,7 +331,7 @@ class DiscGolfPersistenceCodecTest {
         stored[indexKey] = listOf(
             "123", // blank id
             "300notanumber", // non-numeric finish time
-            "onlyonefield", // wrong field count
+            "onlyonefield", // wrong field count (< 5)
             "9991", // well-formed, but no round is stored under that id
             stored.getValue(indexKey),
         ).joinToString("")

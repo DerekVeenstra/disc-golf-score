@@ -81,6 +81,7 @@ fun WearApp(viewModel: RoundViewModel = rememberRoundViewModel()) {
         val courses by viewModel.courses.collectAsState()
         val round by viewModel.round.collectAsState()
         val history by viewModel.history.collectAsState()
+        val justSetRecord by viewModel.justSetRecord.collectAsState()
 
         when (screen) {
             is AppScreen.Home -> HomeScreen(
@@ -105,6 +106,8 @@ fun WearApp(viewModel: RoundViewModel = rememberRoundViewModel()) {
                 onRenameCourse = viewModel::renameCourse,
                 onSetCoursePar = viewModel::setCoursePar,
                 onDeleteCourse = viewModel::deleteCourse,
+                onSetCourseRecordHolders = viewModel::setCourseRecordHolders,
+                onSetCourseRecordToPar = viewModel::setCourseRecordToPar,
                 onAddPlayer = viewModel::addPlayer,
                 onRenamePlayer = viewModel::renamePlayer,
                 onDeletePlayer = viewModel::deletePlayer,
@@ -128,6 +131,7 @@ fun WearApp(viewModel: RoundViewModel = rememberRoundViewModel()) {
                     }
                     activeRound.finished -> FinalScoreboardScreen(
                         round = activeRound,
+                        newRecord = justSetRecord,
                         onDone = {
                             viewModel.done()
                             screen = AppScreen.Home
@@ -158,6 +162,8 @@ fun WearApp(viewModel: RoundViewModel = rememberRoundViewModel()) {
                 onRenameCourse = viewModel::renameCourse,
                 onSetCoursePar = viewModel::setCoursePar,
                 onDeleteCourse = viewModel::deleteCourse,
+                onSetCourseRecordHolders = viewModel::setCourseRecordHolders,
+                onSetCourseRecordToPar = viewModel::setCourseRecordToPar,
                 onDone = { screen = AppScreen.Home },
             )
         }

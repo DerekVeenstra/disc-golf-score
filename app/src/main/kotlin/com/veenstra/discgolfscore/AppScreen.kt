@@ -15,7 +15,7 @@ package com.veenstra.discgolfscore
  * based on `RoundState.finished`, the same way it always has.
  */
 sealed interface AppScreen {
-    /** `RESUME` (only when a round is active) / `NEW ROUND` / `PAST ROUNDS` / `PLAYERS` / `COURSES` (PLAN.md section 3 "Home"). */
+    /** `RESUME` (only when a round is active) / `NEW ROUND` / `PLAYERS` / `COURSES` / `PAST ROUNDS` (PLAN.md section 3 "Home"). */
     data object Home : AppScreen
 
     /** Every finished round, newest first, each re-opening its final scoreboard (PLAN.md section 3 "Past rounds"). */

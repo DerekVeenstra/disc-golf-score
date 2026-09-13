@@ -77,6 +77,22 @@ class RoundViewModelRosterTest {
     }
 
     @Test
+    fun `by default, new players get distinct palette colors, and a deleted player's color is reused next`() {
+        val store = FakePlayerStore()
+        val vm = RoundViewModel(playerStore = store, idGenerator = idSequence())
+
+        val derek = vm.addPlayer("Derek")!!
+        val sam = vm.addPlayer("Sam")!!
+        val alex = vm.addPlayer("Alex")!!
+        assertEquals(PLAYER_PALETTE.take(3), listOf(derek.color, sam.color, alex.color))
+
+        vm.deletePlayer(sam.id)
+        val jo = vm.addPlayer("Jo")!!
+
+        assertEquals(sam.color, jo.color)
+    }
+
+    @Test
     fun `adding a blank-named player is a no-op`() {
         val store = FakePlayerStore()
         val vm = RoundViewModel(playerStore = store, idGenerator = idSequence())

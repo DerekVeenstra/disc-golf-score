@@ -18,38 +18,41 @@ internal fun sanitizeName(raw: String?): String = raw.orEmpty().filterNot { it.i
 /**
  * Opaque white — the [Player.color] every `Player(id, name)` call that doesn't pass one gets,
  * including a legacy player record decoded from before [Player] had a color field at all
- * (see [decodePlayer][DiscGolfRepository.kt]'s 2-field branch). Actual random assignment only
- * happens where a player is created by a person, in [RoundViewModel.addPlayer].
+ * (see [decodePlayer][DiscGolfRepository.kt]'s 2-field branch). Rows treat it as "no color" and
+ * stay plain (see [rowTint]); real colors are only assigned where a player is created by a person,
+ * in [RoundViewModel.addPlayer].
  */
 internal const val DEFAULT_PLAYER_COLOR: Long = 0xFFFFFFFF
 
 /**
- * A random packed ARGB color (`0xAARRGGBB`, the format [androidx.compose.ui.graphics.Color]'s
- * `Long` constructor expects) for a newly created player's row — shown on the players screen and
- * as the background of their row on the hole screen while scoring. Hue is uniform-random across
- * the full wheel so successive players read as visibly distinct; saturation and lightness are
- * fixed at values chosen to stay legible as a tinted row background behind this app's white text
- * on its black theme (PLAN.md's black-and-white base) — saturated enough to read as a color,
- * dark enough that full-opacity white text never washes out against it.
+ * The colors new players are given, in the order [nextPlayerColor] hands them out. Packed ARGB
+ * (`0xAARRGGBB`, the format [androidx.compose.ui.graphics.Color]'s `Long` constructor expects),
+ * drawn at full opacity behind white text: saturated mid-tones that are easy to tell apart at a
+ * glance in sunlight, each still dark enough for white text to stay readable (roughly 4:1 contrast
+ * or better). The most distinct hues come first, so a typical foursome never gets two similar ones.
  */
-internal fun randomPlayerColor(): Long = hslToPackedArgb(hueDegrees = kotlin.random.Random.nextInt(360))
+internal val PLAYER_PALETTE: List<Long> = listOf(
+    0xFF1E6FD9, // blue
+    0xFFD32F2F, // red
+    0xFF2E7D32, // green
+    0xFFE65100, // orange
+    0xFF7B1FA2, // purple
+    0xFF00838F, // teal
+    0xFFC2185B, // pink
+    0xFFA66F00, // gold
+    0xFF3949AB, // indigo
+    0xFF558B2F, // olive
+)
 
-private fun hslToPackedArgb(hueDegrees: Int, saturation: Float = 0.55f, lightness: Float = 0.35f): Long {
-    val h = hueDegrees / 360f
-    val c = (1f - kotlin.math.abs(2f * lightness - 1f)) * saturation
-    val x = c * (1f - kotlin.math.abs((h * 6f) % 2f - 1f))
-    val m = lightness - c / 2f
-    val (r1, g1, b1) = when {
-        h < 1f / 6f -> Triple(c, x, 0f)
-        h < 2f / 6f -> Triple(x, c, 0f)
-        h < 3f / 6f -> Triple(0f, c, x)
-        h < 4f / 6f -> Triple(0f, x, c)
-        h < 5f / 6f -> Triple(x, 0f, c)
-        else -> Triple(c, 0f, x)
-    }
-    fun channel(v: Float) = ((v + m) * 255f).toInt().coerceIn(0, 255).toLong()
-    return (0xFFL shl 24) or (channel(r1) shl 16) or (channel(g1) shl 8) or channel(b1)
-}
+/**
+ * The color for a new player, given the colors [taken] by players already saved: whichever
+ * [PLAYER_PALETTE] color the fewest of them have, earliest in the palette on a tie. So no color
+ * repeats until every palette color is in use, a deleted player's color is the first handed out
+ * again, and past that the palette cycles evenly. Colors outside the palette (such as
+ * [DEFAULT_PLAYER_COLOR]) don't use up a palette slot.
+ */
+internal fun nextPlayerColor(taken: List<Long>): Long =
+    PLAYER_PALETTE.minBy { color -> taken.count { it == color } }
 
-/** A saved, watch-local player who can be ticked onto a round. [color] tints their row's background (players screen, hole screen) — assigned once, randomly, when the player is created ([RoundViewModel.addPlayer]) and kept for the player's lifetime. */
+/** A saved, watch-local player who can be ticked onto a round. [color] fills their row's background (players screen, hole screen) — picked from [PLAYER_PALETTE] when the player is created ([RoundViewModel.addPlayer]) and kept for the player's lifetime. */
 data class Player(val id: String, val name: String, val color: Long = DEFAULT_PLAYER_COLOR)

@@ -27,11 +27,20 @@ import androidx.wear.compose.material3.Text
  * a real value back through [onSetPar] immediately, which is what "editing one marks it learned"
  * (PLAN.md section 3) means in practice — there's nothing to batch, so `SAVE` is really just
  * "done," matching every other roster edit in this app already being applied live.
+ *
+ * The record row (PLAN.md section 2 "Course record") mirrors the name row right above it: tapping
+ * it triggers [onEditRecord], which — like [onRename] — is the caller's own text-input launcher,
+ * prefilled with [Course.recordHolderNames] and free to hold whatever names/ties were typed,
+ * comma-separated. Once a record has holders, a `To par` stepper appears under it for
+ * [onSetRecordToPar] to nudge, the same `−`/`＋` shape as every par row below it — there's no
+ * stepper before then because there's nothing yet for it to adjust.
  */
 @Composable
 fun CourseEditorScreen(
     course: Course,
     onRename: () -> Unit,
+    onEditRecord: () -> Unit,
+    onSetRecordToPar: (Int) -> Unit,
     onSetPar: (holeIndex: Int, newPar: Int) -> Unit,
     onDelete: () -> Unit,
     onDone: () -> Unit,
@@ -46,6 +55,24 @@ fun CourseEditorScreen(
         ) {
             item {
                 PickableRow(label = course.name, selected = false, onClick = onRename)
+            }
+            item {
+                PickableRow(label = "Record: ${formatCourseRecord(course)}", selected = false, onClick = onEditRecord)
+            }
+            if (course.recordHolderNames.isNotEmpty()) {
+                item {
+                    val toPar = requireNotNull(course.recordToPar) // holders and a to-par are set together
+                    val min = course.holeCount * (MIN_STROKES - MAX_PAR)
+                    val max = course.holeCount * (MAX_STROKES - MIN_PAR)
+                    StepperRow(
+                        label = "To par",
+                        value = formatToPar(toPar),
+                        decrementEnabled = toPar > min,
+                        incrementEnabled = toPar < max,
+                        onDecrement = { onSetRecordToPar((toPar - 1).coerceAtLeast(min)) },
+                        onIncrement = { onSetRecordToPar((toPar + 1).coerceAtMost(max)) },
+                    )
+                }
             }
             item {
                 Text(

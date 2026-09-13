@@ -1,12 +1,17 @@
 package com.veenstra.discgolfscore
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -18,6 +23,9 @@ import androidx.wear.compose.material3.EdgeButton
 import androidx.wear.compose.material3.MaterialTheme
 import androidx.wear.compose.material3.ScreenScaffold
 import androidx.wear.compose.material3.Text
+
+/** The "NEW COURSE RECORD!" banner's color — a bright gold that reads clearly against the app's black background, distinct from any [PLAYER_PALETTE] tint a scoreboard row might carry. */
+private val RECORD_GOLD = Color(0xFFFFC107)
 
 /**
  * PLAN.md section 3's "Final scoreboard" — the real screen, built out this phase from Phase 5's
@@ -44,6 +52,12 @@ import androidx.wear.compose.material3.Text
  *
  * Also how a past round is re-shown from [PastRoundsScreen]: [caption] adds its date under the
  * course name and [onDelete] adds a delete row below the standings. The live finish passes neither.
+ *
+ * [newRecord] is the fanfare PLAN.md section 2 "Course record" asks for: a banner above the
+ * standings when this round is the one that just advanced its course's record ([RoundViewModel]'s
+ * `justSetRecord`, computed once at the moment [RoundViewModel.finishRound] ran the write-back).
+ * [WearApp] only ever passes `true` on the live finish path, never when [PastRoundsScreen] reopens
+ * an old round — revisiting a record-holding round later isn't the moment it was *set*.
  */
 @Composable
 fun FinalScoreboardScreen(
@@ -51,6 +65,7 @@ fun FinalScoreboardScreen(
     onDone: () -> Unit,
     caption: String? = null,
     onDelete: (() -> Unit)? = null,
+    newRecord: Boolean = false,
 ) {
     val listState = rememberTransformingLazyColumnState()
     val rows = round.scoreboard()
@@ -71,6 +86,20 @@ fun FinalScoreboardScreen(
                     overflow = TextOverflow.Ellipsis,
                     modifier = Modifier.fillMaxWidth().padding(top = 4.dp, bottom = 2.dp),
                 )
+            }
+            if (newRecord) {
+                item {
+                    Text(
+                        text = "🏆 NEW COURSE RECORD!",
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.Bold,
+                        textAlign = TextAlign.Center,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        color = RECORD_GOLD,
+                        modifier = Modifier.fillMaxWidth().padding(bottom = 6.dp),
+                    )
+                }
             }
             item {
                 Text(
@@ -116,11 +145,25 @@ fun FinalScoreboardScreen(
  * names verified here explicitly), raw stroke total, then to-par — the exact `1 Alex  53 −1` shape
  * PLAN.md section 3's mockup draws. [ScoreboardRow.rank] already accounts for shared ranks on ties;
  * this view never compares [row] against any other row to decide what to print.
+ *
+ * Tinted with [Player.rowTint] the same as every other row that names a player (players screen,
+ * hole screen) — Derek: "the final scoreboard screen should also have the player colours."
  */
 @Composable
 private fun ScoreboardRowView(row: ScoreboardRow) {
+    val tint = row.player.rowTint()
     Row(
-        modifier = Modifier.roundSafeWidth().padding(vertical = 6.dp),
+        modifier = Modifier
+            .roundSafeWidth()
+            .height(40.dp)
+            .then(
+                if (tint != null) {
+                    Modifier.clip(RoundedCornerShape(20.dp)).background(tint)
+                } else {
+                    Modifier
+                },
+            )
+            .padding(horizontal = 14.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Text(

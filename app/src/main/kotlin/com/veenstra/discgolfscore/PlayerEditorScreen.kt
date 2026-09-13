@@ -3,7 +3,6 @@ package com.veenstra.discgolfscore
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
 import androidx.wear.compose.foundation.lazy.TransformingLazyColumn
 import androidx.wear.compose.foundation.lazy.rememberTransformingLazyColumnState
 import androidx.wear.compose.material3.EdgeButton
@@ -32,7 +31,7 @@ fun PlayerEditorScreen(
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
             item {
-                PickableRow(label = player.name, selected = false, tint = Color(player.color), onClick = onRename)
+                PickableRow(label = player.name, selected = false, tint = player.rowTint(), onClick = onRename)
             }
             item {
                 PickableRow(label = "Delete player", selected = false, onClick = onDelete)

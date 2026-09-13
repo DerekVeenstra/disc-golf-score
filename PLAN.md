@@ -62,6 +62,8 @@ Everything in this table that isn't marked "inherited" was chosen by Derek durin
 | **Running total** | Relative to par (`+3`, `E`, `−1`), in a **standings block below the rows** | Standard disc golf convention; keeping it out of the rows is what buys one-line rows and a foursome on screen without scrolling |
 | **Player count** | No cap | Row height and scrolling are sized to work for any number; nothing in the layout assumes a maximum |
 | **Round history** | **Kept.** A round is saved to history the moment it's finished; `DONE` clears only the active round. Listed under Home's `PAST ROUNDS` | Originally "not kept" to keep v1 small; added at Derek's request on 2026-09-11 |
+| **Course record** | Shown on the courses manager and the course editor: best score ever carded on that course *relative to par*, and who holds it (every tied holder, not just one). Kept as fields on `Course` (`recordHolderNames`/`recordToPar`), advanced automatically when a round finishes, and correctable by hand from the course editor | Added at Derek's request on 2026-09-11, **stored rather than derived** — revised the same day once Derek asked for hand-editing: a purely derived value (recomputed from `history`) can't be corrected without editing history itself, so the record moved onto `Course`, the exact same "learned automatically, fixed by hand in the course editor" shape as a learned par (§2 "Why par is learned instead of entered up front"). Automatic advancement (`recordAfterRound`) only counts a round that reached every hole, for the same reason `strokesThrough`/`toPar` already only count holes reached — an early finish's partial total isn't comparable to a full round's. **Changed to relative-to-par** on 2026-09-12 at Derek's request (was raw stroke total): a record now means the same thing across courses of different lengths and survives a learned par later being corrected, matching the app's own convention that "to-par is what's shown" (§3 "Final scoreboard"). |
+| **Course record fanfare** | A gold "🏆 NEW COURSE RECORD!" banner on the final scoreboard, shown once, only on the live finish that actually advanced the record | Added at Derek's request on 2026-09-11, alongside the manual-edit change above. Tracked as `RoundViewModel.justSetRecord`, an in-memory flag set the moment `finishRound()`'s write-back changes something and cleared on the next `startRound`/`done` — deliberately not persisted, so a force-stop right after finishing costs the celebration but nothing else. `PastRoundsScreen` reopening an old record-holding round never shows it: revisiting a record later isn't the moment it was set. |
 | **Finished round persistence** | The finished round stays in storage until `DONE` is pressed | Right-swipe dismisses the app and can't be rebound; an accidental swipe on the final card must not destroy it. Relaunching returns to the scoreboard. |
 | **Finishing** | Both paths confirm — early finish *and* the last hole's `FINISH` | Both are the point of no return; only one of them being guarded is arbitrary |
 | **Ties on the scoreboard** | Shared rank (`1, 1, 3`) | It's a tie; showing one of them as second is wrong |
@@ -133,9 +135,9 @@ exceed the screen. Wear reserves right-swipe for back/dismiss — **nothing** ma
         │               │
         │ ▸ RESUME      │   ← only when a round is in progress
         │ ▸ NEW ROUND   │
-        │ ▸ PAST ROUNDS │
         │ ▸ PLAYERS     │
         │ ▸ COURSES     │
+        │ ▸ PAST ROUNDS │
         ╰───────────────╯
 ```
 
@@ -246,6 +248,10 @@ One scrolling list, one pinned edge button:
 - If the round's course was deleted mid-round, this screen is unaffected — the round carries its own
   `courseName` snapshot and its own hole list. Par write-back to a course that no longer exists
   silently does nothing.
+- **Course record fanfare** (§2 "Course record fanfare"): a gold `🏆 NEW COURSE RECORD!` banner
+  between `FINAL` and the standings, shown only when *this* finish is the one that just advanced
+  the course record — never on a relaunch that lands back here after the fact, and never when
+  re-opening the same round later from `PAST ROUNDS`.
 
 ### Past rounds
 
@@ -258,14 +264,20 @@ finished: its totals count only the holes it reached, exactly like its final sco
 ### Players / Courses managers
 
 Reached from Home for housekeeping outside a round. Same list + `+ New…` + long-press-to-edit
-pattern as the setup screen.
+pattern as the setup screen. Each course's row shows its **course record** as a detail line
+underneath — the best to-par ever carded there, and who holds it (§2 "Course record"); `No record
+yet` before anyone's finished a full round on it.
 
-**Course editor** is where a wrong learned par gets fixed (§2). Rename, then a scrolling
-hole-by-hole par list:
+**Course editor** is where a wrong learned par gets fixed (§2), and now also where the course
+record itself gets fixed by hand. Rename, then the record row, then a scrolling hole-by-hole par
+list:
 
 ```
         ╭───────────────╮
         │   Riverside   │
+        │ Record: Derek │
+        │      — −5     │
+        │ To par ─ −5 ＋│
         │ H1   ─ 3 ＋   │
         │ H2   ─ 3 ＋   │
         │ H3   ─ 4 ＋   │
@@ -273,6 +285,14 @@ hole-by-hole par list:
         │   ⟨ SAVE ⟩    │
         ╰───────────────╯
 ```
+
+The record row opens the same text-entry keyboard/voice input as a rename, prefilled with the
+current holder name(s) — comma-separated for a tie — and typing a blank result clears the record
+entirely. A `To par` stepper appears underneath once there's at least one holder, the same `−`/`＋`
+shape as every par row below it, seeded to a reasonable guess (even par, `0`) the first time a
+name is set with no prior to-par to keep. A round finishing on this course that beats or ties the
+current record still corrects it automatically — hand-editing doesn't turn that off, it's just
+another way to arrive at the same fields.
 
 Same one-line row shape and horizontal inset as the hole screen's player rows — same problem, same
 solution, and it should be the same composable. Unlearned holes show their par-3 default; editing

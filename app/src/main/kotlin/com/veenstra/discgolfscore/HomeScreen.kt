@@ -64,13 +64,13 @@ fun HomeScreen(
                 PickableRow(label = "NEW ROUND", selected = false, leading = "🥏", onClick = onNewRound)
             }
             item {
-                PickableRow(label = "PAST ROUNDS", selected = false, leading = "📋", onClick = onPastRounds)
-            }
-            item {
                 PickableRow(label = "PLAYERS", selected = false, leading = "👥", onClick = onPlayers)
             }
             item {
                 PickableRow(label = "COURSES", selected = false, leading = "⛳", onClick = onCourses)
+            }
+            item {
+                PickableRow(label = "PAST ROUNDS", selected = false, leading = "📋", onClick = onPastRounds)
             }
         }
     }

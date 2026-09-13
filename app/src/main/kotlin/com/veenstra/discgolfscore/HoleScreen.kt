@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -29,7 +30,6 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.wear.compose.foundation.lazy.TransformingLazyColumn
 import androidx.wear.compose.foundation.lazy.rememberTransformingLazyColumnState
-import androidx.wear.compose.material3.EdgeButton
 import androidx.wear.compose.material3.MaterialTheme
 import androidx.wear.compose.material3.ScreenScaffold
 import androidx.wear.compose.material3.Text
@@ -41,11 +41,16 @@ import androidx.wear.compose.material3.Text
  * and [RoundState] (PLAN.md section 4), and this screen only ever reads their output.
  *
  * `onFinish` is called only after the full-screen confirmation this screen itself owns, from
- * either finish path (PLAN.md section 2 "Finishing" — "Both paths confirm"): the `finish round` row
- * on any hole but the last, or the `FINISH ▸` edge button on the last hole. Neither path ever calls
- * `onNextHole` on the last hole — that action is a no-op in the reducer by design (PLAN.md section
- * 4 "NextHole on the last hole is a no-op"), so the last hole's edge button dispatches `onFinish`
- * directly instead of relying on that no-op.
+ * either finish path (PLAN.md section 2 "Finishing" — "Both paths confirm"): the `Finish round` row
+ * on any hole but the last, or the primary [PrimaryActionRow] on the last hole. Neither path ever
+ * calls `onNextHole` on the last hole — that action is a no-op in the reducer by design (PLAN.md
+ * section 4 "NextHole on the last hole is a no-op"), so the last hole's primary row dispatches
+ * `onFinish` directly instead of relying on that no-op.
+ *
+ * The primary next/finish action lives in the scrollable list, right under the standings, rather
+ * than a persistent `EdgeButton` docked to the bottom of the screen — Derek's own call: a big
+ * always-visible button was taking up screen real estate on every hole even when you're mid-way
+ * through entering scores and nowhere near ready to advance.
  */
 @Composable
 fun HoleScreen(
@@ -109,17 +114,35 @@ fun HoleScreen(
     ScreenScaffold(scrollState = listState) { contentPadding ->
         TransformingLazyColumn(
             state = listState,
-            contentPadding = contentPadding.withRoundEdgeInset().withEdgeButtonReserve(),
+            // No `.withEdgeButtonReserve()` — this screen no longer docks an EdgeButton at the
+            // bottom, so there's no reserved space to leave for one.
+            contentPadding = contentPadding.withRoundEdgeInset(),
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
             item {
-                Text(
-                    text = "HOLE ${round.currentHole} / ${round.holes.size}",
-                    fontSize = 14.sp,
-                    fontWeight = FontWeight.Bold,
-                    textAlign = TextAlign.Center,
-                    modifier = Modifier.fillMaxWidth().padding(top = 4.dp, bottom = 2.dp),
-                )
+                // Small and right at the top (Derek: the old "HOLE x/y"/"PAR z" pair "takes up a
+                // ton of real estate") — a status line, not a heading, so it reads at a glance
+                // without competing with the player rows below for space. Folded onto the same
+                // line as the par label when the par isn't being set right now (Derek: "put the
+                // par on the same line as 'hole x of y' if it is not being set") — while it's
+                // expanded into [ParSelector] below, "HOLE x/y" stays on its own line since the
+                // selector itself already shows the par.
+                if (!parExpanded) {
+                    CompactHoleParHeader(
+                        currentHole = round.currentHole,
+                        holeCount = round.holes.size,
+                        par = hole.par,
+                        onClick = { parExpanded = true },
+                    )
+                } else {
+                    Text(
+                        text = "HOLE ${round.currentHole} / ${round.holes.size}",
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.Bold,
+                        textAlign = TextAlign.Center,
+                        modifier = Modifier.fillMaxWidth().padding(top = 2.dp, bottom = 2.dp),
+                    )
+                }
             }
             item {
                 if (parExpanded) {
@@ -137,8 +160,6 @@ fun HoleScreen(
                             parExpanded = false
                         },
                     )
-                } else {
-                    CompactParLabel(par = hole.par, onClick = { parExpanded = true })
                 }
             }
             items(round.players.size) { index ->
@@ -151,7 +172,7 @@ fun HoleScreen(
                     incrementEnabled = strokes < MAX_STROKES,
                     onDecrement = { hapticAdjust(player.id, -1) },
                     onIncrement = { hapticAdjust(player.id, 1) },
-                    tint = Color(player.color),
+                    tint = player.rowTint(),
                 )
             }
             item {
@@ -167,6 +188,15 @@ fun HoleScreen(
                 val player = round.players[index]
                 StandingRow(name = player.name, toPar = round.toPar(player.id))
             }
+            item {
+                // The primary next/finish action, right under the scores rather than pinned to the
+                // bottom of the screen (Derek: "a next hole button under the scores rather than a
+                // big next that is always visible").
+                PrimaryActionRow(
+                    label = if (isLastHole) "Finish round ▸" else "Next hole ▸",
+                    onClick = { if (isLastHole) showFinishConfirm = true else onNextHole() },
+                )
+            }
             if (!isFirstHole) {
                 item {
                     DimTextRow(label = "◂ prev hole", onClick = onPrevHole)
@@ -174,23 +204,63 @@ fun HoleScreen(
             }
             if (!isLastHole) {
                 item {
-                    DimTextRow(label = "finish round", onClick = { showFinishConfirm = true })
+                    DimTextRow(label = "Finish round", onClick = { showFinishConfirm = true })
                 }
             }
-        }
-        EdgeButton(
-            onClick = { if (isLastHole) showFinishConfirm = true else onNextHole() },
-            modifier = Modifier.align(Alignment.BottomCenter),
-        ) {
-            Text(text = if (isLastHole) "FINISH ▸" else "NEXT ▸")
         }
     }
 }
 
-/** The collapsed par affordance on a hole the course already learned — tap to expand (PLAN.md section 3). */
+/**
+ * The collapsed hole-progress + par affordance on a hole the course already learned — tap to
+ * expand (PLAN.md section 3). One combined line ("HOLE 3/9 · PAR 4"), not two stacked elements —
+ * Derek: "put the par on the same line as 'hole x of y' if it is not being set" — and a small,
+ * centered pill rather than a full [PickableRow] (Derek, previously: the old "PAR z" row "takes
+ * up a ton of real estate") — a **deliberate exception** to this file's usual ≥48dp row height,
+ * matched here by a wider-than-visible tap target (the full [roundSafeWidth] row, not just the
+ * text) so the control stays comfortably tappable despite reading small.
+ */
 @Composable
-private fun CompactParLabel(par: Int, onClick: () -> Unit) {
-    PickableRow(label = "PAR $par", selected = false, onClick = onClick)
+private fun CompactHoleParHeader(currentHole: Int, holeCount: Int, par: Int, onClick: () -> Unit) {
+    Box(
+        modifier = Modifier
+            .roundSafeWidth()
+            .height(32.dp)
+            .clip(RoundedCornerShape(16.dp))
+            .background(Color.White.copy(alpha = 0.06f))
+            .clickable(onClick = onClick),
+        contentAlignment = Alignment.Center,
+    ) {
+        Text(text = "HOLE $currentHole/$holeCount  ·  PAR $par", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+    }
+}
+
+/**
+ * The primary next/finish action — a filled, accent-colored pill sitting in the list right after
+ * the standings, in place of the `EdgeButton` this screen used to dock at the bottom of every
+ * hole regardless of scroll position (see [HoleScreen]'s doc comment).
+ */
+@Composable
+private fun PrimaryActionRow(label: String, onClick: () -> Unit) {
+    Box(
+        // Vertical padding first (outermost) so it's margin around the 48dp pill below, not
+        // padding eating into the pill's own height and shrinking its tap target under 48dp.
+        modifier = Modifier
+            .padding(top = 6.dp, bottom = 2.dp)
+            .roundSafeWidth()
+            .height(48.dp)
+            .clip(RoundedCornerShape(24.dp))
+            .background(MaterialTheme.colorScheme.primary)
+            .clickable(onClick = onClick),
+        contentAlignment = Alignment.Center,
+    ) {
+        Text(
+            text = label,
+            fontSize = 14.sp,
+            fontWeight = FontWeight.Bold,
+            color = MaterialTheme.colorScheme.onPrimary,
+        )
+    }
 }
 
 /**
@@ -207,7 +277,7 @@ private fun CompactParLabel(par: Int, onClick: () -> Unit) {
  * discipline `EdgeSafeTransform.kt`'s doc comment describes for the shared inset.
  *
  * Tapping a value calls [onPick] with that exact par (not a relative nudge, unlike every other
- * `StepperRow` in the app) and the caller collapses the control back to [CompactParLabel] — the
+ * `StepperRow` in the app) and the caller collapses the control back to [CompactHoleParHeader] — the
  * auto-collapse-on-pick behavior PLAN.md section 3 implies ("tapping it expands") and Phase 5's log
  * flagged as lost when the stepper replaced this control.
  */
@@ -272,7 +342,7 @@ private fun StandingRow(name: String, toPar: Int) {
 }
 
 /**
- * `◂ prev hole` / `finish round` — dim text rows at the end of the list (PLAN.md section 3), not
+ * `◂ prev hole` / `Finish round` — dim text rows at the end of the list (PLAN.md section 3), not
  * pill-shaped like [PickableRow]: both are rare, low-priority actions this screen deliberately
  * doesn't want reading as prominently as the player rows above them.
  */

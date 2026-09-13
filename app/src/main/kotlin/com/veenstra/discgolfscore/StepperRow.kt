@@ -15,14 +15,26 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.wear.compose.material3.MaterialTheme
 import androidx.wear.compose.material3.Text
 
-/** Every `−`/`＋` target is at least this large on a side (PLAN.md section 3: "Every target stays ≥ 48dp"). */
+/** The row's own height — kept at the app's usual 48dp row rhythm even though the buttons inside it are smaller (see [STEP_BUTTON_SIZE]). */
 private val MIN_TARGET = 48.dp
+
+/**
+ * `−`/`＋` target size — a **deliberate exception** to PLAN.md section 3's usual "every target
+ * stays ≥ 48dp" (which [MIN_TARGET] still names, unchanged, for everything else in the app):
+ * Derek's own call that on the hole screen specifically, a long player name had "no room" once a
+ * full 48dp circle was reserved on each side of the value, and asked for the buttons shrunk and
+ * pushed toward the row's right edge instead. Still a real, if smaller, circular tap target — not
+ * shrunk to icon-only size.
+ */
+private val STEP_BUTTON_SIZE = 36.dp
 
 /**
  * One-line row: a label, then `−  value  ＋`. This is the exact shape PLAN.md section 3 draws for
@@ -49,10 +61,17 @@ private val MIN_TARGET = 48.dp
  * shrank to 0.64 at any point Phase 5 shipped, so if narrower rows were specifically wanted here,
  * that never happened and would need a new, deliberate value.
  *
- * [tint], when supplied, washes the row in a translucent version of that color — the hole
+ * [tint], when supplied, fills the row with that color at full opacity — the hole
  * screen's per-player rows pass their [Player.color] here so a player's score entry sits on the
  * same colored background shown for them on the players screen; the course editor's `H1`/`H2`…
  * par rows pass nothing and stay plain.
+ *
+ * The row carries a 14dp inset on the left (matching [PickableRow]'s own) so [label] doesn't sit
+ * flush against the row's edge — Derek's own read of the un-inset version was "the player names
+ * are too far to the left." Applied to every caller, not just the tinted hole-screen rows, since
+ * the course editor's par rows had the exact same flush-left look and no reason not to get the
+ * same fix. The right inset is deliberately smaller (6dp, not 14dp) — the asymmetry is what moves
+ * the `−`/`＋` cluster over toward the right edge, freeing more of the row's width for [label].
  */
 @Composable
 fun StepperRow(
@@ -69,16 +88,17 @@ fun StepperRow(
         modifier = Modifier
             .roundSafeWidth(rowWidthFraction)
             .height(MIN_TARGET)
-            // Only clipped+tinted when `tint` is actually supplied, so every other caller (the
-            // course editor's par rows) keeps rendering exactly as before — same width, same
-            // edge-to-edge layout, no incidental inset.
+            // Only clipped+tinted when `tint` is actually supplied, so an untinted caller (the
+            // course editor's par rows) still renders with no background at all, not a transparent
+            // rounded-rect it doesn't need.
             .then(
                 if (tint != null) {
-                    Modifier.clip(RoundedCornerShape(24.dp)).background(tint.copy(alpha = 0.28f))
+                    Modifier.clip(RoundedCornerShape(24.dp)).background(tint)
                 } else {
                     Modifier
                 },
-            ),
+            )
+            .padding(start = 14.dp, end = 6.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.SpaceBetween,
     ) {
@@ -91,12 +111,16 @@ fun StepperRow(
         )
         Row(verticalAlignment = Alignment.CenterVertically) {
             StepButton(symbol = "−", enabled = decrementEnabled, onClick = onDecrement)
-            Text(
-                text = value,
-                fontSize = 14.sp,
-                textAlign = androidx.compose.ui.text.style.TextAlign.Center,
-                modifier = Modifier.padding(horizontal = 6.dp).size(width = 22.dp, height = MIN_TARGET),
-            )
+            // A bare Text with a `.size()` modifier draws from the top of its box, not the middle —
+            // Derek's "the par number isn't vertically centered." Wrapping it in a Box with a
+            // centered `contentAlignment` (like every other numeral in this file, e.g. [ParOption])
+            // actually centers it.
+            Box(
+                modifier = Modifier.padding(horizontal = 2.dp).size(width = 18.dp, height = MIN_TARGET),
+                contentAlignment = Alignment.Center,
+            ) {
+                Text(text = value, fontSize = 18.sp, fontWeight = FontWeight.Bold, textAlign = TextAlign.Center)
+            }
             StepButton(symbol = "＋", enabled = incrementEnabled, onClick = onIncrement)
         }
     }
@@ -106,7 +130,7 @@ fun StepperRow(
 private fun StepButton(symbol: String, enabled: Boolean, onClick: () -> Unit) {
     Box(
         modifier = Modifier
-            .size(MIN_TARGET)
+            .size(STEP_BUTTON_SIZE)
             .clip(CircleShape)
             .background(Color.White.copy(alpha = if (enabled) 0.10f else 0.04f))
             .then(if (enabled) Modifier.clickable(onClick = onClick) else Modifier),
@@ -114,7 +138,7 @@ private fun StepButton(symbol: String, enabled: Boolean, onClick: () -> Unit) {
     ) {
         Text(
             text = symbol,
-            fontSize = 16.sp,
+            fontSize = 14.sp,
             color = if (enabled) {
                 MaterialTheme.colorScheme.onBackground
             } else {

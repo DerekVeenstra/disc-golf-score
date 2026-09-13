@@ -47,6 +47,8 @@ fun NewRoundSetupScreen(
     onRenameCourse: (id: String, name: String) -> Unit,
     onSetCoursePar: (id: String, holeIndex: Int, newPar: Int) -> Unit,
     onDeleteCourse: (id: String) -> Unit,
+    onSetCourseRecordHolders: (id: String, rawNames: String) -> Unit,
+    onSetCourseRecordToPar: (id: String, toPar: Int) -> Unit,
     onAddPlayer: (name: String) -> Player?,
     onRenamePlayer: (id: String, name: String) -> Unit,
     onDeletePlayer: (id: String) -> Unit,
@@ -74,6 +76,13 @@ fun NewRoundSetupScreen(
         val editing = mode as? SetupMode.EditingCourse ?: return@rememberTextInputLauncher
         val trimmed = typed?.trim()
         if (!trimmed.isNullOrEmpty()) onRenameCourse(editing.courseId, trimmed)
+    }
+    // Unlike the rename launcher above, a blank result here is meaningful (it clears the record)
+    // rather than ignored — see RoundViewModel.setCourseRecordHolders — so every non-cancelled
+    // result is passed through.
+    val recordHoldersLauncher = rememberTextInputLauncher(label = "Record holder(s)") { typed ->
+        val editing = mode as? SetupMode.EditingCourse ?: return@rememberTextInputLauncher
+        if (typed != null) onSetCourseRecordHolders(editing.courseId, typed)
     }
     val renamePlayerLauncher = rememberTextInputLauncher(label = "Player name") { typed ->
         val editing = mode as? SetupMode.EditingPlayer ?: return@rememberTextInputLauncher
@@ -120,6 +129,8 @@ fun NewRoundSetupScreen(
                 CourseEditorScreen(
                     course = live,
                     onRename = { renameCourseLauncher(live.name) },
+                    onEditRecord = { recordHoldersLauncher(live.recordHolderNames.joinToString(", ")) },
+                    onSetRecordToPar = { toPar -> onSetCourseRecordToPar(live.id, toPar) },
                     onSetPar = { holeIndex, newPar -> onSetCoursePar(live.id, holeIndex, newPar) },
                     onDelete = {
                         onDeleteCourse(live.id)
@@ -207,6 +218,7 @@ private fun PickingScreen(
                     label = player.name,
                     selected = ticked,
                     leading = if (ticked) "☑" else "☐",
+                    tint = player.rowTint(),
                     onClick = { onTogglePlayer(player.id) },
                     onLongClick = { onLongPressPlayer(player) },
                 )

@@ -95,10 +95,23 @@ private fun decodePlayer(entry: String): Player? {
 
 // ---- Courses ---------------------------------------------------------------------------------
 
-/** One course per record (`id`[US]`name`[US]`holeCount`[US]`pars`), records joined by RS. [Course.pars] is digits-only, so it's plain-comma-joined per PLAN.md section 4. */
+/**
+ * One course per record, records joined by RS:
+ * `id`[US]`name`[US]`holeCount`[US]`pars`[US]`recordToPar`[US]`holderName`[US]`holderName`…
+ * [Course.pars] is digits-only, so it's plain-comma-joined per PLAN.md section 4. `recordToPar`
+ * is empty when [Course.recordToPar] is `null`; unlike every other numeric field here it can be
+ * negative (a record under par, the common case), so it's the one field allowed a leading `-`.
+ * Record holder names are a *variable-length* trailing run of FS-separated fields (zero or more)
+ * rather than comma-joined like [Course.pars] — a name isn't digits-only, so comma can't safely
+ * stand in as its separator, but FS already can: [sanitizeName] guarantees no name ever contains a
+ * control character, the same guarantee [Player]'s own FS-joined fields already lean on.
+ */
 internal fun encodeCourses(courses: List<Course>): String =
     courses.joinToString(RECORD_SEP) { c ->
-        listOf(c.id, c.name, c.holeCount.toString(), c.pars.joinToString(",")).joinToString(FIELD_SEP)
+        (
+            listOf(c.id, c.name, c.holeCount.toString(), c.pars.joinToString(","), c.recordToPar?.toString() ?: "") +
+                c.recordHolderNames
+            ).joinToString(FIELD_SEP)
     }
 
 internal fun decodeCourses(raw: String?): List<Course> {
@@ -107,13 +120,17 @@ internal fun decodeCourses(raw: String?): List<Course> {
 }
 
 /**
- * Malformed entries are dropped rather than crashing: wrong field count, blank id/name, a
- * non-numeric or non-positive hole count, a non-numeric par, or — the one Phase 3 called out by
- * name — a par list whose length disagrees with the hole count.
+ * Malformed entries are dropped rather than crashing: too few fields, blank id/name, a
+ * non-numeric or non-positive hole count, a non-numeric par, a par list whose length disagrees
+ * with the hole count, or a non-numeric `recordToPar`. Zero and negative values are both valid
+ * to-par scores, so unlike the other numeric fields there's no positivity check. An empty
+ * `recordToPar` field means no record — any trailing holder-name fields are then ignored rather
+ * than treated as malformed, since a stray leftover there is harmless and not worth losing the
+ * whole course over.
  */
 private fun decodeCourse(entry: String): Course? {
     val parts = entry.split(FIELD_SEP)
-    if (parts.size != 4) return null
+    if (parts.size < 5) return null
     val id = parts[0]
     val name = parts[1]
     if (id.isBlank() || name.isBlank()) return null
@@ -124,7 +141,10 @@ private fun decodeCourse(entry: String): Course? {
     if (pars.any { it == null }) return null
     val parsInts = pars.filterNotNull()
     if (parsInts.size != holeCount) return null
-    return Course(id, name, holeCount, parsInts)
+    val recordField = parts[4]
+    val recordToPar = if (recordField.isEmpty()) null else recordField.toIntOrNull() ?: return null
+    val recordHolderNames = if (recordToPar == null) emptyList() else parts.drop(5).filter { it.isNotBlank() }
+    return Course(id, name, holeCount, parsInts, recordHolderNames, recordToPar)
 }
 
 // ---- Active round ------------------------------------------------------------------------------
