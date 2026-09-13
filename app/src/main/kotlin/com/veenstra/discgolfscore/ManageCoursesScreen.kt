@@ -24,8 +24,9 @@ private sealed interface ManageCoursesMode {
  * fixing a wrong learned par or record, now by way of a layout (PLAN.md section 2 "Layouts"), so
  * this screen exists in Phase 4 even with no round-starting flow behind it yet.
  *
- * Each row's [detail] line is [courseListDetail]: a single-layout course's own record (unchanged
- * from before layouts existed), or a layout count for a course with more than one.
+ * Each row's [detail] line is [courseListDetail]: a layout count, never a record — a record now
+ * only shows where it's actually set, on the layout itself ([CourseEditorScreen]'s own layout
+ * list, and [LayoutEditorScreen]).
  */
 @Composable
 fun ManageCoursesScreen(

@@ -31,8 +31,8 @@ internal fun formatPullSummary(result: PullResult.Success): String {
     return appendSkippedRows(base, result.warnings)
 }
 
-/** `"$count $noun"`, pluralized (`"$noun" + "s"`) unless [count] is exactly `1` — `0` stays plural ("0 rounds"), matching ordinary English. Every noun this app hands in ("player", "course", "round", "row") pluralizes with a plain trailing `s`, so there's no need for anything fancier. */
-private fun countWord(count: Int, noun: String): String =
+/** `"$count $noun"`, pluralized (`"$noun" + "s"`) unless [count] is exactly `1` — `0` stays plural ("0 rounds"), matching ordinary English. Every noun this app hands in ("player", "course", "round", "row", "layout") pluralizes with a plain trailing `s`, so there's no need for anything fancier. Package-visible so [courseListDetail] can reuse it for "N layouts" instead of duplicating the pluralization rule. */
+internal fun countWord(count: Int, noun: String): String =
     if (count == 1) "1 $noun" else "$count ${noun}s"
 
 private fun appendSkippedRows(base: String, warnings: List<String>): String =

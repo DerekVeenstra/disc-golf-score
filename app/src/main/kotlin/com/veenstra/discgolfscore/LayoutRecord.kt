@@ -59,15 +59,10 @@ internal fun formatLayoutRecord(layout: Layout): String {
 }
 
 /**
- * [ManageCoursesScreen]'s per-course row detail: a single-layout course (still the common case,
- * and the one PLAN.md section 3's "Course record" screenshot was drawn against) shows that
- * layout's record exactly as a course's own record used to read, so nothing changes visually for
- * the common case. A course with more than one layout shows a layout count instead — showing any
- * one sibling's record on the course's own row would misrepresent the others.
+ * [ManageCoursesScreen]'s per-course row detail: always a layout count, never a record — a record
+ * belongs to a layout, not to the course that contains it, so Derek asked for it to stop appearing
+ * on the courses list even for the common single-layout case ("no record yet" reading as if the
+ * *course* had none was the tell). [CourseEditorScreen]'s own layout list and [LayoutEditorScreen]
+ * are where [formatLayoutRecord] still shows.
  */
-internal fun courseListDetail(course: Course): String =
-    if (course.layouts.size == 1) {
-        formatLayoutRecord(course.layouts.single())
-    } else {
-        "${course.layouts.size} layouts"
-    }
+internal fun courseListDetail(course: Course): String = countWord(course.layouts.size, "layout")

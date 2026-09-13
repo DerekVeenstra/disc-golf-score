@@ -141,10 +141,10 @@ class LayoutRecordTest {
     // ---- courseListDetail ------------------------------------------------------------------------
 
     @Test
-    fun `courseListDetail shows the layout's own record for a single-layout course`() {
+    fun `courseListDetail shows a layout count even for a single-layout course with a record`() {
         val layout = riverside.copy(recordHolderNames = listOf("Alex"), recordToPar = -3)
         val course = Course("c1", "Riverside", listOf(layout))
-        assertEquals("Alex — −3", courseListDetail(course))
+        assertEquals("1 layout", courseListDetail(course))
     }
 
     @Test
