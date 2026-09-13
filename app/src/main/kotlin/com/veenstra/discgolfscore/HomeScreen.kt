@@ -21,6 +21,10 @@ import androidx.wear.compose.material3.Text
  * always auto-routes a cold launch straight to [AppScreen.Hole], and there's no in-app path off
  * that screen back to [Home] except `DONE`, which clears the round first) — built regardless,
  * since PLAN.md specifies it unconditionally rather than only for paths this phase happens to add.
+ *
+ * `CLOUD` (`CLOUD_SAVES.md` section 6 Phase D) routes to [AppScreen.CloudSync] — status line,
+ * `BACK UP NOW`, `RESTORE`, `CLEAR CONFIG`. Placed last: the newest row, least disruptive to
+ * everyone's existing muscle memory for the rows above it.
  */
 @Composable
 fun HomeScreen(
@@ -30,6 +34,7 @@ fun HomeScreen(
     onPastRounds: () -> Unit,
     onPlayers: () -> Unit,
     onCourses: () -> Unit,
+    onCloud: () -> Unit,
 ) {
     val listState = rememberTransformingLazyColumnState()
     ScreenScaffold(scrollState = listState) { contentPadding ->
@@ -71,6 +76,9 @@ fun HomeScreen(
             }
             item {
                 PickableRow(label = "PAST ROUNDS", selected = false, leading = "📋", onClick = onPastRounds)
+            }
+            item {
+                PickableRow(label = "CLOUD", selected = false, leading = "☁️", onClick = onCloud)
             }
         }
     }

@@ -37,4 +37,7 @@ sealed interface AppScreen {
     data object ManagePlayers : AppScreen
 
     data object ManageCourses : AppScreen
+
+    /** The `CLOUD` row's destination (`CLOUD_SAVES.md` section 6 Phase D): status line, `BACK UP NOW`, `RESTORE` (behind [ConfirmScreen]), `CLEAR CONFIG`. */
+    data object CloudSync : AppScreen
 }

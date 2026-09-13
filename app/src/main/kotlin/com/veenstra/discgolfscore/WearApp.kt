@@ -31,6 +31,9 @@ private fun rememberRoundViewModel(): RoundViewModel {
                     courseStore = repository,
                     roundStore = repository,
                     historyStore = repository,
+                    // Its own small DataStore file, entirely separate from `repository` above --
+                    // see SyncConfigStore.kt's own doc for why (CLOUD_SAVES.md section 6 Phase B).
+                    syncConfigStore = DataStoreSyncConfigStore(appContext),
                 )
             }
         },
@@ -82,6 +85,8 @@ fun WearApp(viewModel: RoundViewModel = rememberRoundViewModel()) {
         val round by viewModel.round.collectAsState()
         val history by viewModel.history.collectAsState()
         val justSetRecord by viewModel.justSetRecord.collectAsState()
+        val syncConfig by viewModel.syncConfig.collectAsState()
+        val syncStatus by viewModel.syncStatus.collectAsState()
 
         when (screen) {
             is AppScreen.Home -> HomeScreen(
@@ -91,6 +96,7 @@ fun WearApp(viewModel: RoundViewModel = rememberRoundViewModel()) {
                 onPastRounds = { screen = AppScreen.PastRounds },
                 onPlayers = { screen = AppScreen.ManagePlayers },
                 onCourses = { screen = AppScreen.ManageCourses },
+                onCloud = { screen = AppScreen.CloudSync },
             )
 
             is AppScreen.PastRounds -> PastRoundsScreen(
@@ -171,6 +177,15 @@ fun WearApp(viewModel: RoundViewModel = rememberRoundViewModel()) {
                 onSetLayoutRecordHolders = viewModel::setLayoutRecordHolders,
                 onSetLayoutRecordToPar = viewModel::setLayoutRecordToPar,
                 onDeleteCourse = viewModel::deleteCourse,
+                onDone = { screen = AppScreen.Home },
+            )
+
+            is AppScreen.CloudSync -> CloudSyncScreen(
+                syncConfig = syncConfig,
+                syncStatus = syncStatus,
+                onBackUpNow = viewModel::backUpNow,
+                onRestore = viewModel::restore,
+                onClearConfig = viewModel::clearSyncConfig,
                 onDone = { screen = AppScreen.Home },
             )
         }
