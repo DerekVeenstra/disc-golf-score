@@ -8,6 +8,7 @@ import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -39,8 +40,11 @@ internal fun Player.rowTint(): Color? = if (color == DEFAULT_PLAYER_COLOR) null 
  * One row of a pick list: course/player selection on the new-round setup screen, and the plain
  * roster rows on the players/courses managers. `selected` drives the highlight; [leading] is the
  * radio/checkbox glyph (`●`/`○` for single-select, `☑`/`☐` for multi-select) or `null` for a
- * plain "+ New…" action row, which has nothing to select. [detail], when given, is a smaller second
- * line under [label] (a past round's date), and makes the row a little taller to fit it.
+ * plain "+ New…" action row, which has nothing to select. [trailing] is a glyph pinned to the
+ * row's right edge instead — the pencil that marks a rename row (course/layout name) as editable,
+ * unlike [leading] which sits with the text and scrolls off with it if the label is long. [detail],
+ * when given, is a smaller second line under [label] (a past round's date), and makes the row a
+ * little taller to fit it.
  *
  * Tap always fires [onClick]. When [onLongClick] is supplied the row also responds to a long
  * press — the manage gesture PLAN.md section 3 asks for ("Long-press any course or player row →
@@ -61,6 +65,7 @@ fun PickableRow(
     label: String,
     selected: Boolean,
     leading: String? = null,
+    trailing: String? = null,
     tint: Color? = null,
     detail: String? = null,
     onLongClick: (() -> Unit)? = null,
@@ -89,11 +94,11 @@ fun PickableRow(
             .padding(horizontal = 14.dp),
         contentAlignment = Alignment.CenterStart,
     ) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
+        Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
             if (leading != null) {
                 Text(text = leading, fontSize = 14.sp, modifier = Modifier.padding(end = 8.dp))
             }
-            Column {
+            Column(modifier = Modifier.weight(1f)) {
                 Text(
                     text = label,
                     fontSize = 14.sp,
@@ -109,6 +114,9 @@ fun PickableRow(
                         color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.75f),
                     )
                 }
+            }
+            if (trailing != null) {
+                Text(text = trailing, fontSize = 14.sp, modifier = Modifier.padding(start = 8.dp))
             }
         }
     }

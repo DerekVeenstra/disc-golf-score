@@ -43,7 +43,7 @@ internal fun recordAfterRound(layout: Layout, round: RoundState): Layout? {
 }
 
 /**
- * "🏆 Derek — −5" (or "🏆 Derek, Sam — −5" for a tie), or "No record yet" when
+ * "🏆 Derek: −5" (or "🏆 Derek, Sam: −5" for a tie), or "No record yet" when
  * [Layout.recordToPar] is `null` — no trophy for a record that doesn't exist yet. Shared by
  * [CourseEditorScreen]'s layout list and [LayoutEditorScreen] so neither can drift on formatting.
  * Reuses [formatToPar] — the same "E"/"+3"/"−5" shape shown everywhere else a to-par appears, so a
@@ -54,7 +54,7 @@ internal fun formatLayoutRecord(layout: Layout): String {
     return if (layout.recordHolderNames.isEmpty() || toPar == null) {
         "No record yet"
     } else {
-        "🏆 ${layout.recordHolderNames.joinToString(", ")} — ${formatToPar(toPar)}"
+        "🏆 ${layout.recordHolderNames.joinToString(", ")}: ${formatToPar(toPar)}"
     }
 }
 

@@ -67,7 +67,7 @@ fun CourseEditorScreen(
                     item {
                         PickableRow(
                             label = course.name,
-                            leading = "✏️",
+                            trailing = "✏️",
                             selected = false,
                             onClick = { renameCourseLauncher(course.name) },
                         )

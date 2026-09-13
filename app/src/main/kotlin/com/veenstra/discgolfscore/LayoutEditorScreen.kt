@@ -77,7 +77,7 @@ fun LayoutEditorScreen(
             item {
                 PickableRow(
                     label = layout.name,
-                    leading = "✏️",
+                    trailing = "✏️",
                     selected = false,
                     onClick = { renameLauncher(layout.name) },
                 )
