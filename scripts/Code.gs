@@ -245,6 +245,19 @@ function upsertRoundsTab(sheet, rounds) {
   }
 }
 
+/**
+ * Run by hand from the Apps Script editor (select it in the function dropdown → Run), never by the
+ * watch: re-renders every round's readable columns from its own `_payload`, for repairing rows an
+ * older version of this script wrote wrong. `_payload` is untouched, so restores are unaffected.
+ */
+function rebuildRoundsFromPayloads() {
+  var sheet = getOrCreateSheet(SpreadsheetApp.getActiveSpreadsheet(), ROUNDS_SHEET_NAME);
+  var warnings = [];
+  var rounds = readRoundsPayloads(sheet, warnings);
+  upsertRoundsTab(sheet, rounds);
+  Logger.log('Rebuilt ' + rounds.length + ' rounds. Warnings: ' + JSON.stringify(warnings));
+}
+
 function toEpochMillis(value) {
   if (value instanceof Date) return value.getTime();
   return 0;
@@ -319,9 +332,12 @@ function buildRoundRows(round, holeColumnCount) {
       }
     });
 
+    // This player's strokes on each counted hole -- not the hole's par, which every player's row
+    // would then share (CLOUD_SAVES.md section 4's example row: h1..hN are per-player scores).
     var holeCells = [];
     for (var h = 0; h < holeColumnCount; h++) {
-      holeCells.push(h < countedHoles.length ? countedHoles[h].par : '');
+      var holeStrokes = h < countedHoles.length ? (countedHoles[h].strokes || {})[player.id] : undefined;
+      holeCells.push(typeof holeStrokes === 'number' ? holeStrokes : '');
     }
 
     return [round.id, new Date(round.finishedAt), round.courseName, round.layoutName, player.name, total, toPar]
