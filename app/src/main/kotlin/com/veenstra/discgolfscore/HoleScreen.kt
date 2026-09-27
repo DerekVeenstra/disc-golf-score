@@ -67,6 +67,7 @@ fun HoleScreen(
     val isFirstHole = round.currentHole == 1
 
     var showFinishConfirm by remember { mutableStateOf(false) }
+    var showScorecard by remember { mutableStateOf(false) }
 
     // A hole's par control starts expanded only when the course didn't already know this hole's
     // par (PLAN.md section 3: "On an unlearned hole the selector is expanded from the start, since
@@ -101,6 +102,11 @@ fun HoleScreen(
             },
             onCancel = { showFinishConfirm = false },
         )
+        return
+    }
+
+    if (showScorecard) {
+        RoundScorecardScreen(round = round, onClose = { showScorecard = false })
         return
     }
 
@@ -175,18 +181,27 @@ fun HoleScreen(
                     tint = player.rowTint(),
                 )
             }
+            // The whole standings block, header and every row, opens the hole-by-hole scorecard
+            // (Derek: open it by "tapping TOTAL") rather than adding another row to this screen.
             item {
                 Text(
                     text = "── TOTAL ──",
                     fontSize = 11.sp,
                     textAlign = TextAlign.Center,
                     color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.6f),
-                    modifier = Modifier.fillMaxWidth().padding(top = 8.dp, bottom = 2.dp),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable { showScorecard = true }
+                        .padding(top = 8.dp, bottom = 2.dp),
                 )
             }
             items(round.players.size) { index ->
                 val player = round.players[index]
-                StandingRow(name = player.name, toPar = round.toPar(player.id))
+                StandingRow(
+                    name = player.name,
+                    toPar = round.toPar(player.id),
+                    onClick = { showScorecard = true },
+                )
             }
             item {
                 // The primary next/finish action, right under the scores rather than pinned to the
@@ -294,11 +309,11 @@ private fun ParOption(par: Int, selected: Boolean, onClick: () -> Unit) {
     }
 }
 
-/** One line of the standings block: a player's name and their live to-par across holes 1..currentHole. */
+/** One line of the standings block: a player's name and their live to-par across holes 1..currentHole. Tapping it opens the scorecard. */
 @Composable
-private fun StandingRow(name: String, toPar: Int) {
+private fun StandingRow(name: String, toPar: Int, onClick: () -> Unit) {
     Row(
-        modifier = Modifier.roundSafeWidth().height(28.dp),
+        modifier = Modifier.roundSafeWidth().height(28.dp).clickable(onClick = onClick),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.SpaceBetween,
     ) {
