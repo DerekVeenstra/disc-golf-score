@@ -49,8 +49,8 @@ import androidx.compose.ui.Modifier
  * diverged from this constant since Phase 5 (see [StepperRow]'s own doc comment) — and found the
  * same result Phase 5 found at 0.64: full 96×96px (48dp) clickable bounds at every position tested,
  * cosmetic wedge-clip only at the extreme edge, same as before. That is direct evidence the width
- * fraction was never the variable controlling tap-target size — [ROUND_EDGE_INSET] and
- * `withEdgeButtonReserve()` are (they keep a row from resting close enough to the mask for the
+ * fraction was never the variable controlling tap-target size — [ROUND_EDGE_INSET] and the
+ * since-removed `EdgeButton` bottom reserve were (they keep a row from resting close enough to the mask for the
  * *glyph* clip to even become visible) — so narrowing width bought nothing. Settled on **0.88**:
  * enough margin below StepperRow's already-proven 0.92 to be conservative, while still leaving
  * course/player names on `PickableRow` (previously stuck at 0.64) dramatically more room before

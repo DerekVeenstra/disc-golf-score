@@ -16,7 +16,6 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.wear.compose.foundation.lazy.TransformingLazyColumn
 import androidx.wear.compose.foundation.lazy.rememberTransformingLazyColumnState
-import androidx.wear.compose.material3.EdgeButton
 import androidx.wear.compose.material3.ScreenScaffold
 import androidx.wear.compose.material3.Text
 
@@ -45,7 +44,7 @@ fun HoleCountPickerScreen(subjectName: String, onCreate: (holeCount: Int) -> Uni
     ScreenScaffold(scrollState = listState) { contentPadding ->
         TransformingLazyColumn(
             state = listState,
-            contentPadding = contentPadding.withRoundEdgeInset().withEdgeButtonReserve(),
+            contentPadding = contentPadding.withRoundEdgeInset(),
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
             item {
@@ -76,14 +75,11 @@ fun HoleCountPickerScreen(subjectName: String, onCreate: (holeCount: Int) -> Uni
                 )
             }
             item {
+                PrimaryActionRow(label = "CREATE", onClick = { onCreate(holeCount) })
+            }
+            item {
                 PickableRow(label = "Cancel", selected = false, onClick = onCancel)
             }
-        }
-        EdgeButton(
-            onClick = { onCreate(holeCount) },
-            modifier = Modifier.align(Alignment.BottomCenter),
-        ) {
-            Text(text = "CREATE")
         }
     }
 }

@@ -32,6 +32,12 @@ advance. At the end you get a final card and the round is done.
 4. **No phone.** Works standalone at a course with no phone in reach and no signal.
 5. **Wrong taps are cheap to fix.** Every score is `−`/`+`; you can walk back to a previous hole
    and correct it. Nothing is one-way until you finish the round.
+6. **Every button is inline; nothing is sticky.** Actions (`START`, `CREATE`, `SAVE`, `DONE`,
+   `NEXT`/`FINISH`, …) are rows in the scrolling list via `PrimaryActionRow`, never an `EdgeButton`
+   or anything else docked to the bottom of the watch face. *(Derek's call, 2026-09-28.)* A pinned
+   button permanently eats a big slice of an already tiny round screen, even when you're nowhere
+   near ready to press it, and forces every list to reserve bottom padding around it. Scrolling to
+   the end of the list to act is an acceptable cost; a new screen with a sticky button is a bug.
 
 ### Explicitly out of scope for v1
 
@@ -181,6 +187,8 @@ disabled until a course and at least one player are chosen.
   ticked player unticks them. Selection is never left pointing at an id that no longer exists. This
   is the exact bug ultimate-score §13 fixed, doubled here by having two selection models.
 - `START` is an `EdgeButton` pinned to the bottom edge, so a long roster never puts it out of reach.
+  **Superseded 2026-09-28 by design principle 6:** `START` is now an inline `PrimaryActionRow` at
+  the end of the list (dimmed and untappable until course/layout/players are all picked).
 
 **Superseded 2026-09-13 by the Layouts phase log below.** Picking a course now resolves a layout
 too before `START` enables — automatically, with no extra screen, when the course has exactly one

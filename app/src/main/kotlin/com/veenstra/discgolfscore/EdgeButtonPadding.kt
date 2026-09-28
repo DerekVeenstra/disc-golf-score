@@ -8,30 +8,6 @@ import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.unit.dp
 
 /**
- * Extra room reserved at the bottom of a `TransformingLazyColumn` whenever the same screen also
- * places an `EdgeButton` — this version of `ScreenScaffold` has no `edgeButton` slot of its own
- * (confirmed by compiling against it: its `content` lambda is just
- * `BoxScope.(PaddingValues) -> Unit`, nothing edge-button-shaped), so every screen here draws its
- * `EdgeButton` itself via `Modifier.align(Alignment.BottomCenter)` inside that same `Box`. Without
- * this, `ScreenScaffold`'s own [PaddingValues] has no idea the button exists, and a short list's
- * last row or two renders straight underneath it — caught by screenshot on the hole-count picker
- * (Phase 4 log) before this existed, where "Custom" and "Cancel" were sitting behind `CREATE`.
- */
-private val EDGE_BUTTON_RESERVE = 64.dp
-
-/** [contentPadding] with [EDGE_BUTTON_RESERVE] added to its bottom inset — see [EDGE_BUTTON_RESERVE]. */
-@Composable
-fun PaddingValues.withEdgeButtonReserve(): PaddingValues {
-    val direction = LocalLayoutDirection.current
-    return PaddingValues(
-        start = calculateStartPadding(direction),
-        top = calculateTopPadding(),
-        end = calculateEndPadding(direction),
-        bottom = calculateBottomPadding() + EDGE_BUTTON_RESERVE,
-    )
-}
-
-/**
  * The other half of PLAN.md section 2's "Round-edge row safety" fix, alongside
  * `EdgeSafeTransform.kt`'s static [roundSafeWidth]: extra top/bottom content padding so a
  * `TransformingLazyColumn`'s first/last rows never scroll into the extreme top/bottom band of the

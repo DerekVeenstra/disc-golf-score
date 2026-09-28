@@ -23,9 +23,14 @@ import androidx.wear.compose.material3.Text
  * there: a big always-visible button was taking up screen real estate even when nowhere near
  * ready to advance); pulled out here so every screen with a "Done"/"Save" action gets the same
  * inline treatment instead of a sticky bottom button.
+ *
+ * [enabled] defaults to true — every original caller (DONE/SAVE) is unconditionally actionable.
+ * [NewRoundSetupScreen]'s START is the first caller that needs it false (course/layout/players
+ * not all picked yet): a dimmed, unclickable pill rather than the near-invisible disabled
+ * `EdgeButton` it replaced.
  */
 @Composable
-fun PrimaryActionRow(label: String, onClick: () -> Unit) {
+fun PrimaryActionRow(label: String, onClick: () -> Unit, enabled: Boolean = true) {
     Box(
         // Vertical padding first (outermost) so it's margin around the 48dp pill below, not
         // padding eating into the pill's own height and shrinking its tap target under 48dp.
@@ -34,15 +39,15 @@ fun PrimaryActionRow(label: String, onClick: () -> Unit) {
             .roundSafeWidth()
             .height(48.dp)
             .clip(RoundedCornerShape(24.dp))
-            .background(MaterialTheme.colorScheme.primary)
-            .clickable(onClick = onClick),
+            .background(MaterialTheme.colorScheme.primary.copy(alpha = if (enabled) 1f else 0.3f))
+            .clickable(enabled = enabled, onClick = onClick),
         contentAlignment = Alignment.Center,
     ) {
         Text(
             text = label,
             fontSize = 14.sp,
             fontWeight = FontWeight.Bold,
-            color = MaterialTheme.colorScheme.onPrimary,
+            color = MaterialTheme.colorScheme.onPrimary.copy(alpha = if (enabled) 1f else 0.6f),
         )
     }
 }

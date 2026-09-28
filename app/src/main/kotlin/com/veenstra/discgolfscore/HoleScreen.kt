@@ -120,8 +120,6 @@ fun HoleScreen(
     ScreenScaffold(scrollState = listState) { contentPadding ->
         TransformingLazyColumn(
             state = listState,
-            // No `.withEdgeButtonReserve()` — this screen no longer docks an EdgeButton at the
-            // bottom, so there's no reserved space to leave for one.
             contentPadding = contentPadding.withRoundEdgeInset(),
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
