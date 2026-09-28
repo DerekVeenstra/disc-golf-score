@@ -50,7 +50,8 @@ private val RECORD_GOLD = Color(0xFFFFC107)
  * happened earlier, in `RoundViewModel`, not here.
  *
  * Also how a past round is re-shown from [PastRoundsScreen]: [caption] adds its date under the
- * course name and [onDelete] adds a delete row below the standings. The live finish passes neither.
+ * course name, [onScorecard] adds a button below the standings that opens the hole-by-hole
+ * [RoundScorecardScreen], and [onDelete] adds a delete row under that. The live finish passes none.
  *
  * [newRecord] is the fanfare PLAN.md section 2 "Course record" asks for: a banner above the
  * standings when this round is the one that just advanced its layout's record ([RoundViewModel]'s
@@ -71,6 +72,7 @@ fun FinalScoreboardScreen(
     onDone: () -> Unit,
     caption: String? = null,
     onDelete: (() -> Unit)? = null,
+    onScorecard: (() -> Unit)? = null,
     newRecord: Boolean = false,
 ) {
     val listState = rememberTransformingLazyColumnState()
@@ -147,6 +149,11 @@ fun FinalScoreboardScreen(
             }
             items(rows.size) { index ->
                 ScoreboardRowView(rows[index])
+            }
+            if (onScorecard != null) {
+                item {
+                    ScorecardButton(onClick = onScorecard)
+                }
             }
             if (onDelete != null) {
                 item {

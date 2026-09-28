@@ -179,27 +179,18 @@ fun HoleScreen(
                     tint = player.rowTint(),
                 )
             }
-            // The whole standings block, header and every row, opens the hole-by-hole scorecard
-            // (Derek: open it by "tapping TOTAL") rather than adding another row to this screen.
             item {
                 Text(
                     text = "── TOTAL ──",
                     fontSize = 11.sp,
                     textAlign = TextAlign.Center,
                     color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.6f),
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clickable { showScorecard = true }
-                        .padding(top = 8.dp, bottom = 2.dp),
+                    modifier = Modifier.fillMaxWidth().padding(top = 8.dp, bottom = 2.dp),
                 )
             }
             items(round.players.size) { index ->
                 val player = round.players[index]
-                StandingRow(
-                    name = player.name,
-                    toPar = round.toPar(player.id),
-                    onClick = { showScorecard = true },
-                )
+                StandingRow(name = player.name, toPar = round.toPar(player.id))
             }
             item {
                 // The primary next/finish action, right under the scores rather than pinned to the
@@ -209,6 +200,9 @@ fun HoleScreen(
                     label = if (isLastHole) "Finish round ▸" else "Next hole ▸",
                     onClick = { if (isLastHole) showFinishConfirm = true else onNextHole() },
                 )
+            }
+            item {
+                ScorecardButton(onClick = { showScorecard = true })
             }
             if (!isFirstHole) {
                 item {
@@ -307,11 +301,11 @@ private fun ParOption(par: Int, selected: Boolean, onClick: () -> Unit) {
     }
 }
 
-/** One line of the standings block: a player's name and their live to-par across holes 1..currentHole. Tapping it opens the scorecard. */
+/** One line of the standings block: a player's name and their live to-par across holes 1..currentHole. */
 @Composable
-private fun StandingRow(name: String, toPar: Int, onClick: () -> Unit) {
+private fun StandingRow(name: String, toPar: Int) {
     Row(
-        modifier = Modifier.roundSafeWidth().height(28.dp).clickable(onClick = onClick),
+        modifier = Modifier.roundSafeWidth().height(28.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.SpaceBetween,
     ) {

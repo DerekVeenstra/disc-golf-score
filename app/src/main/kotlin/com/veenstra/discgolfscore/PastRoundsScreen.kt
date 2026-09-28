@@ -23,13 +23,14 @@ import androidx.wear.compose.material3.Text
 private sealed interface PastRoundsMode {
     data object Listing : PastRoundsMode
     data class Viewing(val id: String) : PastRoundsMode
+    data class ViewingScorecard(val id: String) : PastRoundsMode
     data class ConfirmingDelete(val id: String) : PastRoundsMode
 }
 
 /**
  * Every finished round, newest first (PLAN.md section 3 "Past rounds"): course name with the date
- * under it. Tapping one re-opens the same [FinalScoreboardScreen] the round ended on, plus its date
- * and a delete row. Deleting asks first — unlike a player or a course, a round can't be recreated.
+ * under it. Tapping one re-opens the same [FinalScoreboardScreen] the round ended on, plus its date,
+ * a button into its hole-by-hole [RoundScorecardScreen], and a delete row. Deleting asks first — unlike a player or a course, a round can't be recreated.
  */
 @Composable
 fun PastRoundsScreen(
@@ -91,8 +92,18 @@ fun PastRoundsScreen(
                     round = saved.round,
                     caption = formatRoundDate(saved.finishedAt),
                     onDelete = { mode = PastRoundsMode.ConfirmingDelete(saved.id) },
+                    onScorecard = { mode = PastRoundsMode.ViewingScorecard(saved.id) },
                     onDone = { mode = PastRoundsMode.Listing },
                 )
+            } else {
+                LaunchedEffect(Unit) { mode = PastRoundsMode.Listing }
+            }
+        }
+
+        is PastRoundsMode.ViewingScorecard -> {
+            val saved = history.find { it.id == current.id }
+            if (saved != null) {
+                RoundScorecardScreen(round = saved.round, onClose = { mode = PastRoundsMode.Viewing(saved.id) })
             } else {
                 LaunchedEffect(Unit) { mode = PastRoundsMode.Listing }
             }
