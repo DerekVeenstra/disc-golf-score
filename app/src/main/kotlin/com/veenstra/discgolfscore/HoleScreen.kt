@@ -14,8 +14,10 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -69,6 +71,21 @@ fun HoleScreen(
     var showFinishConfirm by remember { mutableStateOf(false) }
     var showScorecard by remember { mutableStateOf(false) }
 
+    // Leaving a starframe hole (every player birdie or better, [HoleScore.isStarframe]) plays
+    // [StarframeCelebration] first and only then runs the real action — next hole or finish — so
+    // the celebration sits between this hole and whatever follows it. Holds that pending action.
+    // Only the furthest hole reached celebrates: stepping back with `◂ prev hole` and then forward
+    // again over an old starframe hole doesn't replay it (Derek: only when the current hole just
+    // recorded scores, not on navigating through previous holes).
+    var afterCelebration by remember { mutableStateOf<(() -> Unit)?>(null) }
+    var furthestHole by rememberSaveable { mutableIntStateOf(round.currentHole) }
+    LaunchedEffect(round.currentHole) {
+        furthestHole = maxOf(furthestHole, round.currentHole)
+    }
+    val leaveHole: (action: () -> Unit) -> Unit = { action ->
+        if (hole.isStarframe && round.currentHole >= furthestHole) afterCelebration = action else action()
+    }
+
     // A hole's par control starts expanded only when the course didn't already know this hole's
     // par (PLAN.md section 3: "On an unlearned hole the selector is expanded from the start, since
     // that's the hole where a choice is actually being asked for"). Keyed on currentHole so walking
@@ -98,9 +115,19 @@ fun HoleScreen(
             cancelLabel = "No, keep playing",
             onConfirm = {
                 showFinishConfirm = false
-                onFinish()
+                leaveHole(onFinish)
             },
             onCancel = { showFinishConfirm = false },
+        )
+        return
+    }
+
+    afterCelebration?.let { action ->
+        StarframeCelebration(
+            onDone = {
+                afterCelebration = null
+                action()
+            },
         )
         return
     }
@@ -198,7 +225,7 @@ fun HoleScreen(
                 // big next that is always visible").
                 PrimaryActionRow(
                     label = if (isLastHole) "Finish round ▸" else "Next hole ▸",
-                    onClick = { if (isLastHole) showFinishConfirm = true else onNextHole() },
+                    onClick = { if (isLastHole) showFinishConfirm = true else leaveHole(onNextHole) },
                 )
             }
             item {
