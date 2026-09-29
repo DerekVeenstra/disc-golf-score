@@ -66,3 +66,18 @@ dependencies {
     // this is test-only on purpose.
     testImplementation(libs.org.json)
 }
+
+// The JomezPro starframe clip is gitignored (their audio), so a fresh clone or a `git clean -fdx`
+// silently builds without it and StarframeCelebration.kt just runs mute. Warn loudly instead.
+val starframeClip = file("src/main/res/raw/starframe.mp3")
+val checkStarframeClip by tasks.registering {
+    doLast {
+        if (!starframeClip.exists()) {
+            logger.warn(
+                "WARNING: ${starframeClip.path} is missing — the starframe celebration will be silent. " +
+                    "Copy jomez_starframe.mp3 there (it's gitignored, so it doesn't come with a clone).",
+            )
+        }
+    }
+}
+tasks.named("preBuild") { dependsOn(checkStarframeClip) }
