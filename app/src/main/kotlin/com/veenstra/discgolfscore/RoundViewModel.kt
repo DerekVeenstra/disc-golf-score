@@ -388,6 +388,18 @@ class RoundViewModel(
         }
     }
 
+    /**
+     * The final screen's DELETE: the round was already saved to [history] the moment it finished, so
+     * discarding it removes that copy (the newest entry holding this exact round) and then clears
+     * the active round like [done]. The course record / par write-backs already applied are kept.
+     */
+    fun discardFinishedRound() {
+        val round = _round.value ?: return
+        val saved = _history.value.firstOrNull { it.round == round }
+        if (saved != null) deleteSavedRound(saved.id)
+        done()
+    }
+
     // ---- Past rounds ----------------------------------------------------------------------------
 
     fun deleteSavedRound(id: String) {

@@ -40,6 +40,8 @@ private fun rememberRoundViewModel(): RoundViewModel {
     )
 }
 
+private enum class FinishedMode { Scoreboard, Scorecard, ConfirmDelete }
+
 /**
  * One activity, a sealed [AppScreen] held here in Compose state, no nav graph (PLAN.md section 2
  * "Navigation"). `START` on the setup screen starts a round and navigates to [AppScreen.Hole].
@@ -80,6 +82,7 @@ fun WearApp(viewModel: RoundViewModel = rememberRoundViewModel()) {
             val activeRound = viewModel.round.value
             mutableStateOf<AppScreen>(if (activeRound != null) AppScreen.Hole else AppScreen.Home)
         }
+        var finishedMode by remember { mutableStateOf(FinishedMode.Scoreboard) }
         val players by viewModel.players.collectAsState()
         val courses by viewModel.courses.collectAsState()
         val round by viewModel.round.collectAsState()
@@ -137,14 +140,35 @@ fun WearApp(viewModel: RoundViewModel = rememberRoundViewModel()) {
                         // DONE was pressed from a stale composition) — not a normal path.
                         LaunchedEffect(Unit) { screen = AppScreen.Home }
                     }
-                    activeRound.finished -> FinalScoreboardScreen(
-                        round = activeRound,
-                        newRecord = justSetRecord,
-                        onDone = {
-                            viewModel.done()
-                            screen = AppScreen.Home
-                        },
-                    )
+                    activeRound.finished -> when (finishedMode) {
+                        FinishedMode.Scoreboard -> FinalScoreboardScreen(
+                            round = activeRound,
+                            newRecord = justSetRecord,
+                            doneLabel = "SAVE",
+                            onScorecard = { finishedMode = FinishedMode.Scorecard },
+                            onDelete = { finishedMode = FinishedMode.ConfirmDelete },
+                            onDone = {
+                                viewModel.done()
+                                screen = AppScreen.Home
+                            },
+                        )
+                        FinishedMode.Scorecard -> RoundScorecardScreen(
+                            round = activeRound,
+                            onClose = { finishedMode = FinishedMode.Scoreboard },
+                        )
+                        FinishedMode.ConfirmDelete -> ConfirmScreen(
+                            title = "Delete round?",
+                            detail = activeRound.courseName,
+                            confirmLabel = "Yes, delete",
+                            cancelLabel = "No, keep it",
+                            onConfirm = {
+                                viewModel.discardFinishedRound()
+                                finishedMode = FinishedMode.Scoreboard
+                                screen = AppScreen.Home
+                            },
+                            onCancel = { finishedMode = FinishedMode.Scoreboard },
+                        )
+                    }
                     else -> HoleScreen(
                         round = activeRound,
                         onSetPar = viewModel::setPar,
