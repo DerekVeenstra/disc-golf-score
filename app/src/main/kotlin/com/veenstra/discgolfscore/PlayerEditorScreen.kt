@@ -31,7 +31,7 @@ fun PlayerEditorScreen(
                 PickableRow(label = player.name, selected = false, tint = player.rowTint(), onClick = onRename)
             }
             item {
-                PickableRow(label = "Delete player", selected = false, onClick = onDelete)
+                DeleteActionRow(onClick = onDelete)
             }
             item {
                 PrimaryActionRow(label = "DONE", onClick = onDone)

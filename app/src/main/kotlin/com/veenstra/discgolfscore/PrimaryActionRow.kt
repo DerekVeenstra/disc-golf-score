@@ -10,6 +10,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -27,10 +28,17 @@ import androidx.wear.compose.material3.Text
  * [enabled] defaults to true — every original caller (DONE/SAVE) is unconditionally actionable.
  * [NewRoundSetupScreen]'s START is the first caller that needs it false (course/layout/players
  * not all picked yet): a dimmed, unclickable pill rather than the near-invisible disabled
- * `EdgeButton` it replaced.
+ * `EdgeButton` it replaced. [containerColor]/[contentColor] let a destructive action (Delete) reuse
+ * the same pill in red.
  */
 @Composable
-fun PrimaryActionRow(label: String, onClick: () -> Unit, enabled: Boolean = true) {
+fun PrimaryActionRow(
+    label: String,
+    onClick: () -> Unit,
+    enabled: Boolean = true,
+    containerColor: Color = MaterialTheme.colorScheme.primary,
+    contentColor: Color = MaterialTheme.colorScheme.onPrimary,
+) {
     Box(
         // Vertical padding first (outermost) so it's margin around the 48dp pill below, not
         // padding eating into the pill's own height and shrinking its tap target under 48dp.
@@ -39,7 +47,7 @@ fun PrimaryActionRow(label: String, onClick: () -> Unit, enabled: Boolean = true
             .roundSafeWidth()
             .height(48.dp)
             .clip(RoundedCornerShape(24.dp))
-            .background(MaterialTheme.colorScheme.primary.copy(alpha = if (enabled) 1f else 0.3f))
+            .background(containerColor.copy(alpha = if (enabled) 1f else 0.3f))
             .clickable(enabled = enabled, onClick = onClick),
         contentAlignment = Alignment.Center,
     ) {
@@ -47,7 +55,18 @@ fun PrimaryActionRow(label: String, onClick: () -> Unit, enabled: Boolean = true
             text = label,
             fontSize = 14.sp,
             fontWeight = FontWeight.Bold,
-            color = MaterialTheme.colorScheme.onPrimary.copy(alpha = if (enabled) 1f else 0.6f),
+            color = contentColor.copy(alpha = if (enabled) 1f else 0.6f),
         )
     }
+}
+
+/** The red "Delete" pill every destructive row uses — a [PrimaryActionRow] in red. */
+@Composable
+fun DeleteActionRow(onClick: () -> Unit) {
+    PrimaryActionRow(
+        label = "Delete",
+        onClick = onClick,
+        containerColor = Color(0xFFD32F2F),
+        contentColor = Color.White,
+    )
 }

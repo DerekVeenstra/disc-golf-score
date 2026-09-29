@@ -74,6 +74,7 @@ fun FinalScoreboardScreen(
     onDelete: (() -> Unit)? = null,
     onScorecard: (() -> Unit)? = null,
     newRecord: Boolean = false,
+    doneLabel: String = "DONE",
 ) {
     val listState = rememberTransformingLazyColumnState()
     val rows = round.scoreboard()
@@ -157,11 +158,11 @@ fun FinalScoreboardScreen(
             }
             if (onDelete != null) {
                 item {
-                    PickableRow(label = "Delete round", selected = false, onClick = onDelete)
+                    DeleteActionRow(onClick = onDelete)
                 }
             }
             item {
-                PrimaryActionRow(label = "DONE", onClick = onDone)
+                PrimaryActionRow(label = doneLabel, onClick = onDone)
             }
         }
     }

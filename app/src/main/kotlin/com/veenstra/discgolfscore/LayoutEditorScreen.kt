@@ -103,7 +103,7 @@ fun LayoutEditorScreen(
             }
             if (canDelete) {
                 item {
-                    PickableRow(label = "Delete layout", selected = false, onClick = onDelete)
+                    DeleteActionRow(onClick = onDelete)
                 }
             }
             item {

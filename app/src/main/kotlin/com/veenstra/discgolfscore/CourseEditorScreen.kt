@@ -85,7 +85,7 @@ fun CourseEditorScreen(
                         PickableRow(label = "+ New layout…", selected = false, onClick = { newLayoutNameLauncher(null) })
                     }
                     item {
-                        PickableRow(label = "Delete course", selected = false, onClick = { onDeleteCourse(course.id) })
+                        DeleteActionRow(onClick = { onDeleteCourse(course.id) })
                     }
                     item {
                         PrimaryActionRow(label = "SAVE", onClick = onDone)
