@@ -12,6 +12,3 @@ app/build/
 
 # Cloud-saves shared secret (CLOUD_SAVES.md section 2 "Auth"). Machine-local, never committed.
 cloud-saves.secret
-
-# JomezPro starframe clip (StarframeCelebration.kt). Their audio, so machine-local, never committed.
-app/src/main/res/raw/starframe.mp3

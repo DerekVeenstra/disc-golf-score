@@ -171,9 +171,8 @@ fun StarframeCelebration(onDone: () -> Unit) {
 }
 
 /**
- * Plays `res/raw/starframe.mp3` — the JomezPro starframe clip. It's their audio, so it's
- * gitignored rather than committed: it's looked up by name instead of as `R.raw.starframe` so a
- * fresh clone without the file still builds, and the celebration just runs silently.
+ * Plays `res/raw/starframe.mp3` — the JomezPro starframe clip. It's looked up by name rather than
+ * as `R.raw.starframe`; a missing clip just means the celebration runs silently.
  */
 @SuppressLint("DiscouragedApi")
 private fun playStarframeSound(context: Context) {
