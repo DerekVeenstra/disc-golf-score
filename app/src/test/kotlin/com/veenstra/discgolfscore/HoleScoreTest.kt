@@ -20,8 +20,8 @@ class HoleScoreTest {
     }
 
     @Test
-    fun `a solo birdie is a starframe`() {
-        assertTrue(hole(3, 2).isStarframe)
+    fun `a solo birdie is not a starframe`() {
+        assertFalse(hole(3, 2).isStarframe)
     }
 
     @Test

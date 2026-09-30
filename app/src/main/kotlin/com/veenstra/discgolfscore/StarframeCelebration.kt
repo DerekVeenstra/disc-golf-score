@@ -43,7 +43,7 @@ import kotlin.math.cos
 import kotlin.math.sin
 
 private val STARFRAME_GREEN = Color(0xFF3DDC84)
-private const val SOUND_BOOST_MILLIBELS = 800
+private const val SOUND_BOOST_MILLIBELS = 3000
 private const val CELEBRATION_MILLIS = 2600L
 private const val SPARKLE_COUNT = 8
 

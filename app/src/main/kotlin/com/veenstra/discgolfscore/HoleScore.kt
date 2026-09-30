@@ -22,8 +22,9 @@ data class HoleScore(
     /**
      * A "starframe" — JomezPro's name for a hole where every player on the card birdied or better.
      * [strokes] always holds every player in the round (see this class's doc), so checking its
-     * values is checking the whole card. An empty card is never a starframe.
+     * values is checking the whole card. A solo card is never a starframe — it takes at least two
+     * players to have a card to sweep — and neither is an empty one.
      */
     val isStarframe: Boolean
-        get() = strokes.isNotEmpty() && strokes.values.all { it < par }
+        get() = strokes.size > 1 && strokes.values.all { it < par }
 }
